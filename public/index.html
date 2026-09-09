@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensometric Specialities | Sales and Distribution</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="light-theme">
+
+    <!-- LOGIN & SIGNUP SCREEN -->
+    <div id="authContainer" class="auth-wrapper">
+        <div class="auth-card liquid-glass">
+            <div class="auth-header">
+                <div class="logo-box">
+                    <i class="fa-solid fa-store"></i>
+                </div>
+                <h2>Sensometric <span class="accent-text">Specialities</span></h2>
+                <p id="authSubtitle">Sales and Distribution</p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form">
+                <div class="input-group">
+                    <label for="loginUsername"><i class="fa-solid fa-user"></i> Username</label>
+                    <input type="text" id="loginUsername" placeholder="Enter username (default: admin)" required autocomplete="username">
+                </div>
+
+                <div class="input-group">
+                    <label for="loginPassword"><i class="fa-solid fa-lock"></i> Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password (default: admin123)" required autocomplete="current-password">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-right-to-bracket"></i> Login to Portal
+                </button>
+
+                <div class="auth-switch">
+                    <span>Need a custom login account?</span>
+                    <button type="button" id="showRegisterBtn" class="btn-link">Create Account / Sign Up</button>
+                </div>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" class="auth-form hidden">
+                <div class="input-group">
+                    <label for="regFullName"><i class="fa-solid fa-id-card"></i> Full Name</label>
+                    <input type="text" id="regFullName" placeholder="e.g. System Admin" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="regUsername"><i class="fa-solid fa-user-gear"></i> Set Username</label>
+                    <input type="text" id="regUsername" placeholder="Choose a username" required autocomplete="username">
+                </div>
+
+                <div class="input-group">
+                    <label for="regPassword"><i class="fa-solid fa-key"></i> Set Password</label>
+                    <input type="password" id="regPassword" placeholder="Create password" required autocomplete="new-password">
+                </div>
+
+                <button type="submit" class="btn btn-accent btn-block">
+                    <i class="fa-solid fa-user-plus"></i> Create Account
+                </button>
+
+                <div class="auth-switch">
+                    <span>Already registered?</span>
+                    <button type="button" id="showLoginBtn" class="btn-link">Back to Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP DASHBOARD INTERFACE -->
+    <div id="mainApp" class="app-layout hidden">
+        
+        <!-- SIDEBAR: Liquid Glass Dock & Menu -->
+        <aside class="sidebar liquid-glass-sidebar">
+            <div class="window-controls">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-yellow"></span>
+                <span class="dot dot-green"></span>
+            </div>
+
+            <div class="sidebar-brand">
+                <div class="brand-icon-box">
+                    <i class="fa-solid fa-store"></i>
+                </div>
+                <h3>Admin</h3>
+            </div>
+
+            <div class="sidebar-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="sidebarSearch" placeholder="Search...">
+            </div>
+
+            <div class="menu-label">MENU</div>
+
+            <nav class="sidebar-menu liquid-glass-dock">
+                <button class="nav-item active" data-tab="createOrder" data-target="accordion-createOrder">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span>Create New Order</span>
+                </button>
+
+                <button class="nav-item" data-tab="orderHistory" data-target="accordion-orderHistory">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Orders History</span>
+                </button>
+
+                <button class="nav-item" data-tab="inventory" data-target="accordion-inventory">
+                    <i class="fa-solid fa-boxes-stacked"></i>
+                    <span>Stock & Inventory</span>
+                </button>
+
+                <button class="nav-item" data-tab="stockHistory" data-target="accordion-stockHistory">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span>Stock History</span>
+                </button>
+
+                <button class="nav-item" data-tab="reports" data-target="accordion-reports">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filters & Reports</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-user liquid-glass-pill">
+                <div class="user-avatar">AD</div>
+                <div class="user-info">
+                    <h4 id="userDisplayName">Admin</h4>
+                    <span id="userRole">Active User</span>
+                </div>
+                <button id="logoutBtn" class="btn-signout" title="Sign Out">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Top Header -->
+            <header class="top-header portal-card">
+                <div class="header-brand-title">
+                    <div class="store-badge-icon">
+                        <i class="fa-solid fa-shop"></i>
+                    </div>
+                    <div>
+                        <h1>SENSOMETRIC SPECIALITIES</h1>
+                        <p>Sales and Distribution</p>
+                    </div>
+                </div>
+
+                <div class="header-actions">
+                    <button id="exportExcelBtn" class="btn btn-outline-sm">
+                        <i class="fa-solid fa-file-excel text-excel"></i> Excel
+                    </button>
+                    <button id="printPageBtn" class="btn btn-outline-sm" onclick="window.print()">
+                        <i class="fa-solid fa-print"></i> Print
+                    </button>
+                    <button id="themeToggleBtn" class="btn-icon-sm" title="Toggle Light/Dark Theme">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 4 METRIC KPI SUMMARY CARDS -->
+            <div class="metrics-row">
+                <div class="metric-kpi-card portal-card">
+                    <div class="metric-kpi-header">
+                        <span class="kpi-label">TOTAL SALES (PAID)</span>
+                        <div class="kpi-icon icon-trend-green">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-value value-brown" id="kpiTotalSalesPaid">Rs.0</div>
+                    <div class="kpi-subtext"><i class="fa-solid fa-circle-check text-success"></i> Received Revenue</div>
+                </div>
+
+                <div class="metric-kpi-card portal-card">
+                    <div class="metric-kpi-header">
+                        <span class="kpi-label">MARKET PENDING (UDHAAR)</span>
+                        <div class="kpi-icon icon-clock-amber">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-value value-amber" id="kpiMarketPendingUdhaar">Rs.0</div>
+                    <div class="kpi-subtext"><i class="fa-solid fa-clock text-warning"></i> Outstanding Credit</div>
+                </div>
+
+                <div class="metric-kpi-card portal-card">
+                    <div class="metric-kpi-header">
+                        <span class="kpi-label">TOTAL ORDERS LOGGED</span>
+                        <div class="kpi-icon icon-ticket-brown">
+                            <i class="fa-solid fa-receipt"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-value value-dark" id="kpiTotalOrdersLogged">0</div>
+                    <div class="kpi-subtext"><i class="fa-solid fa-box text-primary"></i> Lifetime Invoices</div>
+                </div>
+
+                <div class="metric-kpi-card portal-card kpi-alert-card">
+                    <div class="metric-kpi-header">
+                        <span class="kpi-label">LOW STOCK ALERTS</span>
+                        <div class="kpi-icon icon-alert-red">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-value value-red" id="kpiLowStockCount">0</div>
+                    <div class="kpi-subtext" id="kpiLowStockSubtext"><i class="fa-solid fa-shield-halved"></i> Stock Health</div>
+                </div>
+            </div>
+
+            <!-- ACCORDION SECTIONS -->
+            <div class="accordion-container">
+                
+                <!-- ACCORDION 1: CREATE NEW ORDER FORM -->
+                <div class="accordion-card portal-card" id="accordion-createOrder">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-createOrder')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-cart-shopping accordion-icon"></i>
+                            <h2>Create New Order Form</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-up accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <form id="createOrderForm" class="order-form-layout">
+                            <!-- Row 1: Customer Name & Phone Number -->
+                            <div class="form-row-2">
+                                <div class="pill-input-box">
+                                    <input type="text" id="custName" placeholder="Customer Name" required>
+                                </div>
+                                <div class="pill-input-box">
+                                    <input type="text" id="custPhone" placeholder="Phone Number">
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Email Address & Delivery Address -->
+                            <div class="form-row-2">
+                                <div class="pill-input-box">
+                                    <input type="email" id="custEmail" placeholder="Email Address">
+                                </div>
+                                <div class="pill-input-box">
+                                    <input type="text" id="deliveryAddress" placeholder="Delivery Address">
+                                </div>
+                            </div>
+
+                            <!-- Row 3: Item Name -->
+                            <div class="form-row-1">
+                                <div class="pill-input-box item-select-wrap">
+                                    <select id="itemSelect" class="pill-select">
+                                        <option value="">-- Select Product from Inventory or Enter Below --</option>
+                                    </select>
+                                    <input type="text" id="itemName" placeholder="Item Name" required>
+                                </div>
+                            </div>
+
+                            <!-- Row 4: Quantity & Price per item -->
+                            <div class="form-row-2">
+                                <div class="pill-input-box">
+                                    <input type="number" id="itemQuantity" placeholder="Quantity" min="1" value="1" required>
+                                </div>
+                                <div class="pill-input-box">
+                                    <input type="number" step="0.01" id="itemPrice" placeholder="Price per item" required>
+                                </div>
+                            </div>
+
+                            <!-- Row 5: Checkboxes: Udhaar & 18% GST -->
+                            <div class="form-options-row">
+                                <label class="custom-check-label" for="markUdhaarCheck">
+                                    <input type="checkbox" id="markUdhaarCheck">
+                                    <span>Mark as <strong class="text-udhaar-highlight">Credit (Udhaar)</strong></span>
+                                </label>
+
+                                <label class="custom-check-label" for="includeGstCheck">
+                                    <input type="checkbox" id="includeGstCheck" checked>
+                                    <span>Include <strong>18% GST (Tax Invoice)</strong></span>
+                                </label>
+                            </div>
+
+                            <!-- Row 6: Total Payable Amount Box -->
+                            <div class="total-payable-box">
+                                <span class="total-label">Total Payable Amount</span>
+                                <span class="total-amount-val" id="totalPayableDisplay">Rs.0</span>
+                            </div>
+
+                            <!-- Row 7: Confirm & Save Order Button -->
+                            <button type="submit" id="confirmSaveOrderBtn" class="confirm-order-btn">
+                                <i class="fa-solid fa-circle-check"></i> Confirm & Save Order
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ACCORDION 2: ORDERS HISTORY -->
+                <div class="accordion-card portal-card" id="accordion-orderHistory">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-orderHistory')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-list-check accordion-icon"></i>
+                            <h2>Orders History</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-up accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <div class="toolbar-flex">
+                            <div class="search-input-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="historySearch" placeholder="Search by Customer Name, Product Name...">
+                            </div>
+                            <div class="toolbar-btns">
+                                <select id="historyStatusFilter" class="select-sm">
+                                    <option value="">All Payment Statuses</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Udhaar">Credit (Udhaar)</option>
+                                </select>
+                                <button id="refreshOrdersBtn" class="btn btn-outline-sm">
+                                    <i class="fa-solid fa-rotate"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="portal-table custom-history-table">
+                                <thead>
+                                    <tr class="pill-table-header">
+                                        <th>DATE</th>
+                                        <th>CUSTOMER</th>
+                                        <th>PRODUCT</th>
+                                        <th>PRICE/ITEM</th>
+                                        <th>QTY</th>
+                                        <th>TOTAL</th>
+                                        <th>STATUS</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orderHistoryTableBody">
+                                    <tr><td colspan="8" class="text-center">Loading orders history...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACCORDION 3: STOCK & INVENTORY CONTROL -->
+                <div class="accordion-card portal-card" id="accordion-inventory">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-inventory')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-boxes-stacked accordion-icon"></i>
+                            <h2>Stock & Inventory Control</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-down accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <div class="toolbar-flex">
+                            <div class="search-input-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="inventorySearch" placeholder="Search products by Name, Category...">
+                            </div>
+                            <div class="toolbar-btns">
+                                <select id="categoryFilter" class="select-sm">
+                                    <option value="">All Categories</option>
+                                    <option value="Products">Products</option>
+                                </select>
+                                <button id="openAddProductModal" class="btn btn-primary btn-sm">
+                                    <i class="fa-solid fa-plus"></i> + Add Product
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="portal-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>Category</th>
+                                        <th>Price (Rs.)</th>
+                                        <th>Cost Price</th>
+                                        <th>Stock Qty</th>
+                                        <th>Stock Level Meter</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventoryTableBody">
+                                    <tr><td colspan="8" class="text-center">Loading inventory items...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACCORDION 4: STOCK HISTORY LOG (WITH DELETE ACTION) -->
+                <div class="accordion-card portal-card" id="accordion-stockHistory">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-stockHistory')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-clock-rotate-left accordion-icon"></i>
+                            <h2>Stock History</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-up accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <!-- Filter Toolbar for Stock History -->
+                        <div class="toolbar-flex">
+                            <div class="search-input-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="stockHistorySearch" placeholder="Filter by Product Name or Notes...">
+                            </div>
+                            <div class="toolbar-btns">
+                                <input type="date" id="stockHistoryDateFilter" class="select-sm" title="Filter by Date">
+                                <select id="stockHistoryStatusFilter" class="select-sm">
+                                    <option value="">All Statuses (Paid / Credit / Restock)</option>
+                                    <option value="Paid">Paid Sales</option>
+                                    <option value="Credit">Credit (Udhaar) Sales</option>
+                                    <option value="Restock">Restock</option>
+                                    <option value="Initial Stock">Initial Stock</option>
+                                </select>
+                                <button id="refreshStockHistoryBtn" class="btn btn-outline-sm">
+                                    <i class="fa-solid fa-rotate"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="portal-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>PRODUCT NAME</th>
+                                        <th>QUANTITY CHANGE</th>
+                                        <th>CHANGE TYPE</th>
+                                        <th>NOTES</th>
+                                        <th>DATE & TIME</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockHistoryTableBody">
+                                    <tr><td colspan="7" class="text-center">Loading stock history audit log...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACCORDION 5: FILTERS & REPORTS -->
+                <div class="accordion-card portal-card" id="accordion-reports">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-reports')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-filter accordion-icon"></i>
+                            <h2>Filters & Reports</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-down accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <div class="reports-filter-grid">
+                            <div class="input-group">
+                                <label for="reportStartDate">Start Date</label>
+                                <input type="date" id="reportStartDate">
+                            </div>
+                            <div class="input-group">
+                                <label for="reportEndDate">End Date</label>
+                                <input type="date" id="reportEndDate">
+                            </div>
+                            <div class="input-group">
+                                <label for="reportStatus">Payment Filter</label>
+                                <select id="reportStatus">
+                                    <option value="ALL">All Orders</option>
+                                    <option value="Paid">Paid Orders Only</option>
+                                    <option value="Udhaar">Udhaar (Pending) Only</option>
+                                </select>
+                            </div>
+                            <div class="report-btn-cell">
+                                <button id="exportCsvBtn" class="btn btn-accent">
+                                    <i class="fa-solid fa-file-excel"></i> Export CSV Report
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL: ADD / EDIT PRODUCT -->
+    <div id="productModal" class="modal-overlay hidden">
+        <div class="modal-card portal-card">
+            <div class="modal-header">
+                <h3 id="modalProductTitle">Add New Product to Inventory</h3>
+                <button class="close-modal-btn" onclick="closeModal('productModal')">&times;</button>
+            </div>
+            <form id="productForm">
+                <input type="hidden" id="prodId">
+                <div class="input-group">
+                    <label for="prodName">Product Name</label>
+                    <input type="text" id="prodName" placeholder="e.g. Milk 1kg" required>
+                </div>
+                <div class="input-group">
+                    <label for="prodCategory">Category</label>
+                    <input type="text" id="prodCategory" placeholder="e.g. Products" required>
+                </div>
+                <div class="form-row-2">
+                    <div class="input-group">
+                        <label for="prodPrice">Selling Price (Rs.)</label>
+                        <input type="number" step="0.01" id="prodPrice" placeholder="0.00" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="prodCost">Cost Price (Rs.)</label>
+                        <input type="number" step="0.01" id="prodCost" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="form-row-2">
+                    <div class="input-group">
+                        <label for="prodStock">Stock Quantity</label>
+                        <input type="number" id="prodStock" placeholder="0" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="prodMinAlert">Low Stock Alert Level</label>
+                        <input type="number" id="prodMinAlert" value="5">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-sm" onclick="closeModal('productModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: QUICK STOCK ADJUSTMENT -->
+    <div id="stockModal" class="modal-overlay hidden">
+        <div class="modal-card portal-card modal-sm">
+            <div class="modal-header">
+                <h3>Adjust Inventory Stock</h3>
+                <button class="close-modal-btn" onclick="closeModal('stockModal')">&times;</button>
+            </div>
+            <form id="stockForm">
+                <input type="hidden" id="stockProdId">
+                <div class="stock-info-box">
+                    <h4 id="stockProdName">Product Name</h4>
+                    <p>Current Stock: <strong id="stockCurrentQty">0</strong></p>
+                </div>
+
+                <div class="input-group">
+                    <label for="stockAdjustment">Qty to Add (+) or Deduct (-)</label>
+                    <input type="number" id="stockAdjustment" placeholder="e.g. +10 or -5" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="stockNotes">Reason / Notes</label>
+                    <input type="text" id="stockNotes" placeholder="e.g. New Batch / Adjustment">
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-sm" onclick="closeModal('stockModal')">Cancel</button>
+                    <button type="submit" class="btn btn-accent">Update Stock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: TAX INVOICE & RECEIPT FOR SENSOMETRIC SPECIALITIES -->
+    <div id="invoiceModal" class="modal-overlay hidden">
+        <div class="modal-card portal-card modal-md">
+            <div class="modal-header no-print">
+                <h3>Sensometric Specialities - Tax Invoice</h3>
+                <button class="close-modal-btn" onclick="closeModal('invoiceModal')">&times;</button>
+            </div>
+            
+            <div id="printableInvoice" class="invoice-container">
+                <!-- Receipt content populated dynamically -->
+            </div>
+
+            <div class="modal-footer no-print">
+                <button type="button" class="btn btn-outline-sm" onclick="closeModal('invoiceModal')">Close</button>
+                <button type="button" class="btn btn-primary" onclick="window.print()">
+                    <i class="fa-solid fa-print"></i> Print Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="toast hidden">
+        <i id="toastIcon" class="fa-solid fa-circle-check"></i>
+        <span id="toastMessage">Notification message</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
