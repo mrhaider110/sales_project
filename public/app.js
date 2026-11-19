@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Theme Setup
 function initTheme() {
-    const savedTheme = localStorage.getItem('sh_theme') || 'light-theme';
+    const savedTheme = localStorage.getItem('sh_theme') || 'dark-theme';
     document.body.className = savedTheme;
     updateThemeIcon();
 }
@@ -98,10 +98,22 @@ function setupEventListeners() {
             btn.classList.add('active');
 
             if (targetAccordionId) {
+                // Collapse all other accordions to simulate tab switching
+                document.querySelectorAll('.accordion-card').forEach(card => {
+                    if (card.id !== targetAccordionId) {
+                        card.classList.add('collapsed');
+                    }
+                });
+
                 const targetCard = document.getElementById(targetAccordionId);
                 if (targetCard) {
                     targetCard.classList.remove('collapsed');
-                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.scrollTo({ top: 0, behavior: 'smooth' });
+                    } else {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                 }
             }
         });
@@ -202,10 +214,35 @@ function showToast(message, type = 'success') {
 }
 
 // ----------------------------------------------------
-// AUTHENTICATION LOGIC
+// AUTHENTICATION LOGIC & SESSION MANAGEMENT
 // ----------------------------------------------------
+function isTokenExpired(token) {
+    if (!token) return true;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return false;
+        let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4) {
+            base64 += '=';
+        }
+        const payload = JSON.parse(decodeURIComponent(escape(atob(base64))));
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+            return true;
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
 function checkAuth() {
     if (state.token && state.user) {
+        if (isTokenExpired(state.token)) {
+            handleLogout(false);
+            showToast('Session expired. Please log in again.', 'warning');
+            return;
+        }
+
         authContainer.classList.add('hidden');
         mainApp.classList.remove('hidden');
         document.getElementById('userDisplayName').innerText = state.user.fullName || state.user.username;
@@ -221,6 +258,26 @@ function checkAuth() {
         mainApp.classList.add('hidden');
     }
 }
+
+// Global Fetch Interceptor to gracefully handle session expiration
+const originalFetch = window.fetch.bind(window);
+window.fetch = async function(...args) {
+    const res = await originalFetch(...args);
+    if ((res.status === 401 || res.status === 403) && state.token) {
+        try {
+            const clone = res.clone();
+            const data = await clone.json();
+            if (data && !data.success) {
+                handleLogout(false);
+                showToast('Session expired. Please log in again.', 'warning');
+            }
+        } catch (e) {
+            handleLogout(false);
+            showToast('Session expired. Please log in again.', 'warning');
+        }
+    }
+    return res;
+};
 
 async function handleLogin(e) {
     e.preventDefault();
@@ -279,12 +336,14 @@ async function handleRegister(e) {
     }
 }
 
-function handleLogout() {
+function handleLogout(showNotification = true) {
     state.token = null;
     state.user = null;
     localStorage.removeItem('sh_token');
     localStorage.removeItem('sh_user');
-    showToast('Logged out successfully.', 'info');
+    if (showNotification) {
+        showToast('Logged out successfully.', 'info');
+    }
     checkAuth();
 }
 
@@ -1032,3 +1091,18 @@ function exportToExcel() {
 
     showToast('Exported Sensometric Specialities report to Excel CSV file!', 'success');
 }
+
+// Explicit global attachments for HTML inline onclick handlers
+window.toggleAccordion = toggleAccordion;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.openStockModal = openStockModal;
+window.editProduct = editProduct;
+window.deleteProduct = deleteProduct;
+window.showInvoiceReceipt = showInvoiceReceipt;
+window.markOrderAsPaid = markOrderAsPaid;
+window.deleteOrder = deleteOrder;
+window.deleteStockHistoryEntry = deleteStockHistoryEntry;
+window.exportToExcel = exportToExcel;
+window.calculateOrderTotal = calculateOrderTotal;
+

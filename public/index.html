@@ -8,9 +8,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=5.5">
 </head>
-<body class="light-theme">
+<body class="dark-theme">
 
     <!-- LOGIN & SIGNUP SCREEN -->
     <div id="authContainer" class="auth-wrapper">
@@ -296,7 +296,7 @@
                 </div>
 
                 <!-- ACCORDION 2: ORDERS HISTORY -->
-                <div class="accordion-card portal-card" id="accordion-orderHistory">
+                <div class="accordion-card portal-card collapsed" id="accordion-orderHistory">
                     <div class="accordion-header" onclick="toggleAccordion('accordion-orderHistory')">
                         <div class="accordion-title">
                             <i class="fa-solid fa-list-check accordion-icon"></i>
@@ -346,7 +346,7 @@
                 </div>
 
                 <!-- ACCORDION 3: STOCK & INVENTORY CONTROL -->
-                <div class="accordion-card portal-card" id="accordion-inventory">
+                <div class="accordion-card portal-card collapsed" id="accordion-inventory">
                     <div class="accordion-header" onclick="toggleAccordion('accordion-inventory')">
                         <div class="accordion-title">
                             <i class="fa-solid fa-boxes-stacked accordion-icon"></i>
@@ -395,7 +395,7 @@
                 </div>
 
                 <!-- ACCORDION 4: STOCK HISTORY LOG (WITH DELETE ACTION) -->
-                <div class="accordion-card portal-card" id="accordion-stockHistory">
+                <div class="accordion-card portal-card collapsed" id="accordion-stockHistory">
                     <div class="accordion-header" onclick="toggleAccordion('accordion-stockHistory')">
                         <div class="accordion-title">
                             <i class="fa-solid fa-clock-rotate-left accordion-icon"></i>
@@ -448,7 +448,7 @@
                 </div>
 
                 <!-- ACCORDION 5: FILTERS & REPORTS -->
-                <div class="accordion-card portal-card" id="accordion-reports">
+                <div class="accordion-card portal-card collapsed" id="accordion-reports">
                     <div class="accordion-header" onclick="toggleAccordion('accordion-reports')">
                         <div class="accordion-title">
                             <i class="fa-solid fa-filter accordion-icon"></i>
@@ -592,6 +592,6 @@
         <span id="toastMessage">Notification message</span>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5.5"></script>
 </body>
 </html>
