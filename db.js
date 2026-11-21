@@ -49,6 +49,7 @@ async function initMssqlTables() {
                 CREATE TABLE Users (
                     id INT IDENTITY(1,1) PRIMARY KEY,
                     username NVARCHAR(50) NOT NULL UNIQUE,
+                    gmail NVARCHAR(254) NULL,
                     password_hash NVARCHAR(255) NOT NULL,
                     full_name NVARCHAR(100) NOT NULL,
                     role NVARCHAR(20) DEFAULT 'Admin',
@@ -56,11 +57,22 @@ async function initMssqlTables() {
                 );
             END;
 
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'gmail')
+            BEGIN
+                ALTER TABLE Users ADD gmail NVARCHAR(254) NULL;
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID('Users') AND name = 'UX_Users_gmail')
+            BEGIN
+                CREATE UNIQUE INDEX UX_Users_gmail ON Users(gmail) WHERE gmail IS NOT NULL;
+            END;
+
             IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Products')
             BEGIN
                 CREATE TABLE Products (
                     id INT IDENTITY(1,1) PRIMARY KEY,
-                    sku NVARCHAR(50) NOT NULL UNIQUE,
+                    user_id INT DEFAULT 1,
+                    sku NVARCHAR(50) NOT NULL,
                     name NVARCHAR(150) NOT NULL,
                     category NVARCHAR(50) NOT NULL,
                     price DECIMAL(18, 2) NOT NULL,
@@ -75,6 +87,7 @@ async function initMssqlTables() {
             BEGIN
                 CREATE TABLE Orders (
                     id INT IDENTITY(1,1) PRIMARY KEY,
+                    user_id INT DEFAULT 1,
                     order_number NVARCHAR(50) NOT NULL UNIQUE,
                     customer_name NVARCHAR(100) DEFAULT 'Walk-in Customer',
                     customer_phone NVARCHAR(20) DEFAULT '',
@@ -108,6 +121,7 @@ async function initMssqlTables() {
             BEGIN
                 CREATE TABLE StockHistory (
                     id INT IDENTITY(1,1) PRIMARY KEY,
+                    user_id INT DEFAULT 1,
                     product_id INT NOT NULL,
                     product_name NVARCHAR(150) NOT NULL,
                     quantity_change INT NOT NULL,
@@ -115,6 +129,21 @@ async function initMssqlTables() {
                     notes NVARCHAR(255) DEFAULT '',
                     created_at DATETIME DEFAULT GETDATE()
                 );
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Products') AND name = 'user_id')
+            BEGIN
+                ALTER TABLE Products ADD user_id INT DEFAULT 1;
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Orders') AND name = 'user_id')
+            BEGIN
+                ALTER TABLE Orders ADD user_id INT DEFAULT 1;
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('StockHistory') AND name = 'user_id')
+            BEGIN
+                ALTER TABLE StockHistory ADD user_id INT DEFAULT 1;
             END;
         `);
 
@@ -160,6 +189,7 @@ function initSqliteDB() {
                 sqliteDb.run(`CREATE TABLE IF NOT EXISTS Users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
+                    gmail TEXT,
                     password_hash TEXT NOT NULL,
                     full_name TEXT NOT NULL,
                     role TEXT DEFAULT 'Admin',
@@ -168,7 +198,8 @@ function initSqliteDB() {
 
                 sqliteDb.run(`CREATE TABLE IF NOT EXISTS Products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sku TEXT UNIQUE NOT NULL,
+                    user_id INTEGER DEFAULT 1,
+                    sku TEXT NOT NULL,
                     name TEXT NOT NULL,
                     category TEXT NOT NULL,
                     price REAL NOT NULL,
@@ -180,6 +211,7 @@ function initSqliteDB() {
 
                 sqliteDb.run(`CREATE TABLE IF NOT EXISTS Orders (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER DEFAULT 1,
                     order_number TEXT UNIQUE NOT NULL,
                     customer_name TEXT DEFAULT 'Walk-in Customer',
                     customer_phone TEXT DEFAULT '',
@@ -207,6 +239,7 @@ function initSqliteDB() {
 
                 sqliteDb.run(`CREATE TABLE IF NOT EXISTS StockHistory (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER DEFAULT 1,
                     product_id INTEGER NOT NULL,
                     product_name TEXT NOT NULL,
                     quantity_change INTEGER NOT NULL,
@@ -215,12 +248,48 @@ function initSqliteDB() {
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`);
 
-                // Ensure columns exist on Orders table if created previously
+                // Ensure columns exist on Orders and other tables if created previously
+                sqliteDb.run("ALTER TABLE Products ADD COLUMN user_id INTEGER DEFAULT 1", () => {});
+                sqliteDb.run("ALTER TABLE Orders ADD COLUMN user_id INTEGER DEFAULT 1", () => {});
+                sqliteDb.run("ALTER TABLE StockHistory ADD COLUMN user_id INTEGER DEFAULT 1", () => {});
                 sqliteDb.run("ALTER TABLE Orders ADD COLUMN tax_amount REAL DEFAULT 0.00", () => {});
                 sqliteDb.run("ALTER TABLE Orders ADD COLUMN gst_rate REAL DEFAULT 18.00", () => {});
                 sqliteDb.run("ALTER TABLE Orders ADD COLUMN payment_status TEXT DEFAULT 'Paid'", () => {});
                 sqliteDb.run("ALTER TABLE Orders ADD COLUMN customer_email TEXT DEFAULT ''", () => {});
                 sqliteDb.run("ALTER TABLE Orders ADD COLUMN delivery_address TEXT DEFAULT ''", () => {});
+
+                sqliteDb.all("PRAGMA table_info(Users)", (err, columns) => {
+                    if (err) {
+                        console.error('Error checking Users table columns:', err.message);
+                        return reject(err);
+                    }
+
+                    const hasGmailColumn = columns.some(column => column.name === 'gmail');
+                    const createGmailIndex = () => {
+                        sqliteDb.run(
+                            'CREATE UNIQUE INDEX IF NOT EXISTS UX_Users_gmail ON Users(gmail) WHERE gmail IS NOT NULL',
+                            (indexErr) => {
+                                if (indexErr) {
+                                    console.error('Error creating Gmail uniqueness index:', indexErr.message);
+                                    return reject(indexErr);
+                                }
+                                resolve();
+                            }
+                        );
+                    };
+
+                    if (hasGmailColumn) {
+                        createGmailIndex();
+                    } else {
+                        sqliteDb.run('ALTER TABLE Users ADD COLUMN gmail TEXT', (alterErr) => {
+                            if (alterErr) {
+                                console.error('Error adding Gmail column to Users table:', alterErr.message);
+                                return reject(alterErr);
+                            }
+                            createGmailIndex();
+                        });
+                    }
+                });
 
                 // Check default admin user
                 sqliteDb.get("SELECT COUNT(*) as count FROM Users", async (err, row) => {
@@ -233,20 +302,19 @@ function initSqliteDB() {
                     }
                 });
 
-                // Check seed products
-                sqliteDb.get("SELECT COUNT(*) as count FROM Products", (err, row) => {
+                // Check seed products for admin
+                sqliteDb.get("SELECT COUNT(*) as count FROM Products WHERE user_id = 1", (err, row) => {
                     if (row && row.count === 0) {
-                        const stmt = sqliteDb.prepare("INSERT INTO Products (sku, name, category, price, cost_price, stock_quantity, min_stock_alert) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                        stmt.run(['PRD-1001', 'Wireless Mouse', 'Electronics', 1500.00, 950.00, 45, 10]);
-                        stmt.run(['PRD-1002', 'Mechanical Keyboard', 'Electronics', 4500.00, 3200.00, 20, 5]);
-                        stmt.run(['PRD-1003', 'USB-C Charging Cable 2m', 'Accessories', 850.00, 400.00, 8, 10]);
-                        stmt.run(['PRD-1004', 'HD LED Monitor 24-inch', 'Electronics', 28500.00, 22000.00, 12, 3]);
-                        stmt.run(['PRD-1005', 'Ergonomic Desk Chair', 'Furniture', 18500.00, 13500.00, 4, 5]);
+                        const stmt = sqliteDb.prepare("INSERT INTO Products (user_id, sku, name, category, price, cost_price, stock_quantity, min_stock_alert) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        stmt.run([1, 'PRD-1001', 'Wireless Mouse', 'Electronics', 1500.00, 950.00, 45, 10]);
+                        stmt.run([1, 'PRD-1002', 'Mechanical Keyboard', 'Electronics', 4500.00, 3200.00, 20, 5]);
+                        stmt.run([1, 'PRD-1003', 'USB-C Charging Cable 2m', 'Accessories', 850.00, 400.00, 8, 10]);
+                        stmt.run([1, 'PRD-1004', 'HD LED Monitor 24-inch', 'Electronics', 28500.00, 22000.00, 12, 3]);
+                        stmt.run([1, 'PRD-1005', 'Ergonomic Desk Chair', 'Furniture', 18500.00, 13500.00, 4, 5]);
                         stmt.finalize();
                     }
                 });
 
-                resolve();
             });
         });
     });

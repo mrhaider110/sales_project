@@ -21,6 +21,7 @@ app.use(
             directives: {
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+                scriptSrcAttr: ["'unsafe-inline'"],
                 styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
                 fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
                 imgSrc: ["'self'", "data:", "blob:"],
@@ -31,20 +32,20 @@ app.use(
     })
 );
 
-// General Rate Limiter (200 requests per 15 min per IP)
+// General Rate Limiter (High limit for local application)
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: 10000,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests from this IP, please try again later.' }
 });
 app.use('/api/', generalLimiter);
 
-// Specific Login Brute-force Protection (15 attempts per 15 min)
+// Login Protection
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 15,
+    max: 500,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' }
@@ -144,14 +145,21 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
 app.post('/api/auth/register', loginLimiter, async (req, res) => {
     try {
-        let { username, password, fullName, role } = req.body;
+        let { username, password, fullName, gmail, role } = req.body;
 
-        if (!username || !password || !fullName) {
-            return res.status(400).json({ success: false, message: 'All fields (Username, Password, Full Name) are required.' });
+        if (typeof username !== 'string' || typeof password !== 'string' ||
+            typeof fullName !== 'string' || typeof gmail !== 'string' ||
+            !username.trim() || !password || !fullName.trim() || !gmail.trim()) {
+            return res.status(400).json({ success: false, message: 'Full name, Gmail address, username, and password are required.' });
         }
 
         username = String(username).trim();
         fullName = String(fullName).trim();
+        gmail = gmail.trim().toLowerCase();
+
+        if (gmail.length > 254 || !/^[^\s@]+@gmail\.com$/.test(gmail)) {
+            return res.status(400).json({ success: false, message: 'Please enter a valid @gmail.com address.' });
+        }
 
         if (username.length < 3 || username.length > 30) {
             return res.status(400).json({ success: false, message: 'Username must be between 3 and 30 characters.' });
@@ -166,13 +174,18 @@ app.post('/api/auth/register', loginLimiter, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Username is already taken. Please choose another.' });
         }
 
+        const existingGmail = await db.queryOne('SELECT id FROM Users WHERE LOWER(gmail) = @gmail', { gmail });
+        if (existingGmail) {
+            return res.status(400).json({ success: false, message: 'This Gmail address is already associated with an account.' });
+        }
+
         const saltRounds = 10;
         const password_hash = await bcrypt.hash(password, saltRounds);
         const userRole = role === 'Admin' ? 'Admin' : 'Active User';
 
         await db.executeRun(
-            'INSERT INTO Users (username, password_hash, full_name, role) VALUES (@username, @password_hash, @fullName, @role)',
-            { username, password_hash, fullName, role: userRole }
+            'INSERT INTO Users (username, gmail, password_hash, full_name, role) VALUES (@username, @gmail, @password_hash, @fullName, @role)',
+            { username, gmail, password_hash, fullName, role: userRole }
         );
 
         res.json({ success: true, message: 'Account created successfully! You can now log in.' });
@@ -225,8 +238,9 @@ app.post('/api/auth/update-profile', authenticateToken, async (req, res) => {
 // ----------------------------------------------------
 app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
     try {
-        const products = await db.queryAll('SELECT * FROM Products');
-        const orders = await db.queryAll('SELECT * FROM Orders');
+        const userId = req.user.id;
+        const products = await db.queryAll('SELECT * FROM Products WHERE user_id = @userId', { userId });
+        const orders = await db.queryAll('SELECT * FROM Orders WHERE user_id = @userId', { userId });
 
         let totalStockUnits = 0;
         let lowStockCount = 0;
@@ -251,8 +265,8 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
         });
 
         const formattedRecent = db.getDBType() === 'MSSQL' 
-            ? await db.queryAll('SELECT TOP 5 * FROM Orders ORDER BY created_at DESC')
-            : await db.queryAll('SELECT * FROM Orders ORDER BY created_at DESC LIMIT 5');
+            ? await db.queryAll('SELECT TOP 5 * FROM Orders WHERE user_id = @userId ORDER BY created_at DESC', { userId })
+            : await db.queryAll('SELECT * FROM Orders WHERE user_id = @userId ORDER BY created_at DESC LIMIT 5', { userId });
 
         res.json({
             success: true,
@@ -279,7 +293,8 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
 // ----------------------------------------------------
 app.get('/api/products', authenticateToken, async (req, res) => {
     try {
-        const products = await db.queryAll('SELECT * FROM Products ORDER BY id DESC');
+        const userId = req.user.id;
+        const products = await db.queryAll('SELECT * FROM Products WHERE user_id = @userId ORDER BY id DESC', { userId });
         res.json({ success: true, products });
     } catch (err) {
         console.error('Get products error:', err);
@@ -289,6 +304,7 @@ app.get('/api/products', authenticateToken, async (req, res) => {
 
 app.post('/api/products', authenticateToken, async (req, res) => {
     try {
+        const userId = req.user.id;
         const { sku, name, category, price, costPrice, stockQuantity, minStockAlert } = req.body;
 
         const sanitizedName = String(name || '').trim();
@@ -298,13 +314,20 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Valid Product Name and non-negative Price are required.' });
         }
 
-        const generatedSku = sku || 'PRD-' + Date.now().toString().slice(-6);
+        const generatedSku = sku ? String(sku).trim() : 'PRD-' + Date.now().toString().slice(-6);
         const initialStock = Math.max(0, parseInt(stockQuantity) || 0);
 
+        // Check if SKU already exists for THIS user
+        const existingSku = await db.queryOne('SELECT id FROM Products WHERE sku = @sku AND user_id = @userId', { sku: generatedSku, userId });
+        if (existingSku) {
+            return res.status(400).json({ success: false, message: `Product with SKU "${generatedSku}" already exists in your inventory.` });
+        }
+
         await db.executeRun(
-            `INSERT INTO Products (sku, name, category, price, cost_price, stock_quantity, min_stock_alert) 
-             VALUES (@sku, @name, @category, @price, @cost_price, @stock_quantity, @min_stock_alert)`,
+            `INSERT INTO Products (user_id, sku, name, category, price, cost_price, stock_quantity, min_stock_alert) 
+             VALUES (@userId, @sku, @name, @category, @price, @cost_price, @stock_quantity, @min_stock_alert)`,
             {
+                userId,
                 sku: generatedSku,
                 name: sanitizedName,
                 category: String(category || 'Products').trim(),
@@ -315,12 +338,12 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             }
         );
 
-        const inserted = await db.queryOne('SELECT id FROM Products WHERE name = @name ORDER BY id DESC', { name });
+        const inserted = await db.queryOne('SELECT id FROM Products WHERE name = @name AND user_id = @userId ORDER BY id DESC', { name: sanitizedName, userId });
         if (inserted && initialStock > 0) {
             await db.executeRun(
-                `INSERT INTO StockHistory (product_id, product_name, quantity_change, change_type, notes)
-                 VALUES (@product_id, @product_name, @quantity_change, 'Initial Stock', 'Added new product to inventory')`,
-                { product_id: inserted.id, product_name: name, quantity_change: initialStock }
+                `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
+                 VALUES (@userId, @product_id, @product_name, @quantity_change, 'Initial Stock', 'Added new product to inventory')`,
+                { userId, product_id: inserted.id, product_name: sanitizedName, quantity_change: initialStock }
             );
         }
 
@@ -335,9 +358,14 @@ app.post('/api/products', authenticateToken, async (req, res) => {
 app.put('/api/products/:id', authenticateToken, async (req, res) => {
     try {
         const productId = req.params.id;
+        const userId = req.user.id;
         const { name, category, price, costPrice, stockQuantity, minStockAlert } = req.body;
 
-        const currentProd = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id', { id: productId });
+        const currentProd = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId', { id: productId, userId });
+        if (!currentProd) {
+            return res.status(404).json({ success: false, message: 'Product not found or access denied.' });
+        }
+
         const oldStock = currentProd ? (currentProd.stock_quantity || 0) : 0;
         const newStock = parseInt(stockQuantity) || 0;
         const stockDiff = newStock - oldStock;
@@ -345,9 +373,10 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         await db.executeRun(
             `UPDATE Products 
              SET name = @name, category = @category, price = @price, cost_price = @cost_price, stock_quantity = @stock_quantity, min_stock_alert = @min_stock_alert 
-             WHERE id = @id`,
+             WHERE id = @id AND user_id = @userId`,
             {
                 id: productId,
+                userId,
                 name,
                 category: category || 'Products',
                 price: parseFloat(price) || 0,
@@ -359,9 +388,9 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
 
         if (stockDiff !== 0) {
             await db.executeRun(
-                `INSERT INTO StockHistory (product_id, product_name, quantity_change, change_type, notes)
-                 VALUES (@product_id, @product_name, @quantity_change, 'Edit Adjustment', 'Stock modified via product edit')`,
-                { product_id: productId, product_name: name, quantity_change: stockDiff }
+                `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
+                 VALUES (@userId, @product_id, @product_name, @quantity_change, 'Edit Adjustment', 'Stock modified via product edit')`,
+                { userId, product_id: productId, product_name: name, quantity_change: stockDiff }
             );
         }
 
@@ -376,25 +405,27 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
 app.put('/api/products/:id/stock', authenticateToken, async (req, res) => {
     try {
         const productId = req.params.id;
+        const userId = req.user.id;
         const { adjustmentQuantity, notes } = req.body;
 
-        const product = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id', { id: productId });
+        const product = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId', { id: productId, userId });
         if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found.' });
+            return res.status(404).json({ success: false, message: 'Product not found or access denied.' });
         }
 
         const qtyDelta = parseInt(adjustmentQuantity) || 0;
         const newStock = Math.max(0, (product.stock_quantity || 0) + qtyDelta);
 
         await db.executeRun(
-            'UPDATE Products SET stock_quantity = @stock WHERE id = @id',
-            { stock: newStock, id: productId }
+            'UPDATE Products SET stock_quantity = @stock WHERE id = @id AND user_id = @userId',
+            { stock: newStock, id: productId, userId }
         );
 
         await db.executeRun(
-            `INSERT INTO StockHistory (product_id, product_name, quantity_change, change_type, notes)
-             VALUES (@product_id, @product_name, @quantity_change, @change_type, @notes)`,
+            `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
+             VALUES (@userId, @product_id, @product_name, @quantity_change, @change_type, @notes)`,
             {
+                userId,
                 product_id: productId,
                 product_name: product.name,
                 quantity_change: qtyDelta,
@@ -414,11 +445,23 @@ app.put('/api/products/:id/stock', authenticateToken, async (req, res) => {
 app.delete('/api/products/:id', authenticateToken, async (req, res) => {
     try {
         const productId = req.params.id;
-        await db.executeRun('DELETE FROM Products WHERE id = @id', { id: productId });
-        res.json({ success: true, message: 'Product removed from inventory.' });
+        const userId = req.user.id;
+
+        const existing = await db.queryOne('SELECT id FROM Products WHERE id = @id AND user_id = @userId', { id: productId, userId });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Product not found or access denied.' });
+        }
+
+        // Clean up any StockHistory referencing this product for this user
+        await db.executeRun('DELETE FROM StockHistory WHERE product_id = @id AND user_id = @userId', { id: productId, userId });
+        // Dissociate OrderItems so existing invoices remain viewable
+        await db.executeRun('UPDATE OrderItems SET product_id = 0 WHERE product_id = @id', { id: productId });
+        // Remove product
+        await db.executeRun('DELETE FROM Products WHERE id = @id AND user_id = @userId', { id: productId, userId });
+        res.json({ success: true, message: 'Product removed from inventory successfully!' });
     } catch (err) {
         console.error('Delete product error:', err);
-        res.status(500).json({ success: false, message: 'Error deleting product.' });
+        res.status(500).json({ success: false, message: 'Error deleting product: ' + err.message });
     }
 });
 
@@ -428,6 +471,7 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/orders', authenticateToken, async (req, res) => {
     try {
+        const userId = req.user.id;
         const { customerName, customerPhone, customerEmail, deliveryAddress, items, discount, paymentMethod, paymentStatus, includeGst } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -436,8 +480,14 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
         for (const item of items) {
             if (item.productId && item.productId > 0) {
-                const prod = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id', { id: item.productId });
-                if (prod && prod.stock_quantity < item.quantity) {
+                const prod = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId', { id: item.productId, userId });
+                if (!prod) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: `Product "${item.productName || item.productId}" not found in your inventory.` 
+                    });
+                }
+                if (prod.stock_quantity < item.quantity) {
                     return res.status(400).json({ 
                         success: false, 
                         message: `Insufficient stock for "${prod.name}". Available: ${prod.stock_quantity}, Requested: ${item.quantity}` 
@@ -459,9 +509,10 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         const status = paymentStatus || 'Paid';
 
         await db.executeRun(
-            `INSERT INTO Orders (order_number, customer_name, customer_phone, customer_email, delivery_address, total_amount, tax_amount, gst_rate, discount, net_amount, payment_method, payment_status)
-             VALUES (@order_number, @customer_name, @customer_phone, @customer_email, @delivery_address, @total_amount, @tax_amount, @gst_rate, @discount, @net_amount, @payment_method, @payment_status)`,
+            `INSERT INTO Orders (user_id, order_number, customer_name, customer_phone, customer_email, delivery_address, total_amount, tax_amount, gst_rate, discount, net_amount, payment_method, payment_status)
+             VALUES (@userId, @order_number, @customer_name, @customer_phone, @customer_email, @delivery_address, @total_amount, @tax_amount, @gst_rate, @discount, @net_amount, @payment_method, @payment_status)`,
             {
+                userId,
                 order_number: orderNumber,
                 customer_name: customerName || 'Walk-in Customer',
                 customer_phone: customerPhone || '',
@@ -477,7 +528,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             }
         );
 
-        const createdOrder = await db.queryOne('SELECT id FROM Orders WHERE order_number = @order_number', { order_number: orderNumber });
+        const createdOrder = await db.queryOne('SELECT id FROM Orders WHERE order_number = @order_number AND user_id = @userId', { order_number: orderNumber, userId });
         const orderId = createdOrder ? createdOrder.id : null;
 
         const statusTag = (status.toLowerCase().includes('udhaar') || status.toLowerCase().includes('credit')) ? 'Credit' : 'Paid';
@@ -499,14 +550,15 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
             if (item.productId && item.productId > 0) {
                 await db.executeRun(
-                    'UPDATE Products SET stock_quantity = stock_quantity - @qty WHERE id = @id',
-                    { qty: item.quantity, id: item.productId }
+                    'UPDATE Products SET stock_quantity = stock_quantity - @qty WHERE id = @id AND user_id = @userId',
+                    { qty: item.quantity, id: item.productId, userId }
                 );
 
                 await db.executeRun(
-                    `INSERT INTO StockHistory (product_id, product_name, quantity_change, change_type, notes)
-                     VALUES (@product_id, @product_name, @quantity_change, 'Sale Deduction', @notes)`,
+                    `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
+                     VALUES (@userId, @product_id, @product_name, @quantity_change, 'Sale Deduction', @notes)`,
                     {
+                        userId,
                         product_id: item.productId,
                         product_name: item.productName,
                         quantity_change: -item.quantity,
@@ -545,11 +597,17 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 app.put('/api/orders/:id/status', authenticateToken, async (req, res) => {
     try {
         const orderId = req.params.id;
+        const userId = req.user.id;
         const { paymentStatus } = req.body;
 
+        const existingOrder = await db.queryOne('SELECT id FROM Orders WHERE id = @id AND user_id = @userId', { id: orderId, userId });
+        if (!existingOrder) {
+            return res.status(404).json({ success: false, message: 'Order not found or access denied.' });
+        }
+
         await db.executeRun(
-            'UPDATE Orders SET payment_status = @status WHERE id = @id',
-            { status: paymentStatus || 'Paid', id: orderId }
+            'UPDATE Orders SET payment_status = @status WHERE id = @id AND user_id = @userId',
+            { status: paymentStatus || 'Paid', id: orderId, userId }
         );
 
         res.json({ success: true, message: `Payment status updated to ${paymentStatus}!` });
@@ -563,21 +621,27 @@ app.put('/api/orders/:id/status', authenticateToken, async (req, res) => {
 app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
     try {
         const orderId = req.params.id;
+        const userId = req.user.id;
+
+        const existingOrder = await db.queryOne('SELECT id FROM Orders WHERE id = @id AND user_id = @userId', { id: orderId, userId });
+        if (!existingOrder) {
+            return res.status(404).json({ success: false, message: 'Order not found or access denied.' });
+        }
 
         const items = await db.queryAll('SELECT product_id, product_name, quantity FROM OrderItems WHERE order_id = @id', { id: orderId });
         for (const item of items) {
             if (item.product_id && item.product_id > 0) {
-                await db.executeRun('UPDATE Products SET stock_quantity = stock_quantity + @qty WHERE id = @id', { qty: item.quantity, id: item.product_id });
+                await db.executeRun('UPDATE Products SET stock_quantity = stock_quantity + @qty WHERE id = @id AND user_id = @userId', { qty: item.quantity, id: item.product_id, userId });
                 await db.executeRun(
-                    `INSERT INTO StockHistory (product_id, product_name, quantity_change, change_type, notes)
-                     VALUES (@product_id, @product_name, @quantity_change, 'Order Deleted', 'Restored stock on order deletion')`,
-                    { product_id: item.product_id, product_name: item.product_name, quantity_change: item.quantity }
+                    `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
+                     VALUES (@userId, @product_id, @product_name, @quantity_change, 'Order Deleted', 'Restored stock on order deletion')`,
+                    { userId, product_id: item.product_id, product_name: item.product_name, quantity_change: item.quantity }
                 );
             }
         }
 
         await db.executeRun('DELETE FROM OrderItems WHERE order_id = @id', { id: orderId });
-        await db.executeRun('DELETE FROM Orders WHERE id = @id', { id: orderId });
+        await db.executeRun('DELETE FROM Orders WHERE id = @id AND user_id = @userId', { id: orderId, userId });
 
         res.json({ success: true, message: 'Order deleted successfully!' });
 
@@ -589,7 +653,8 @@ app.delete('/api/orders/:id', authenticateToken, async (req, res) => {
 
 app.get('/api/orders', authenticateToken, async (req, res) => {
     try {
-        const orders = await db.queryAll('SELECT * FROM Orders ORDER BY id DESC');
+        const userId = req.user.id;
+        const orders = await db.queryAll('SELECT * FROM Orders WHERE user_id = @userId ORDER BY id DESC', { userId });
         
         for (const order of orders) {
             const items = await db.queryAll('SELECT product_name, quantity, unit_price FROM OrderItems WHERE order_id = @order_id', { order_id: order.id });
@@ -615,7 +680,8 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
 app.get('/api/orders/:id', authenticateToken, async (req, res) => {
     try {
         const orderId = req.params.id;
-        const order = await db.queryOne('SELECT * FROM Orders WHERE id = @id', { id: orderId });
+        const userId = req.user.id;
+        const order = await db.queryOne('SELECT * FROM Orders WHERE id = @id AND user_id = @userId', { id: orderId, userId });
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found.' });
@@ -640,7 +706,8 @@ app.get('/api/orders/:id', authenticateToken, async (req, res) => {
 // ----------------------------------------------------
 app.get('/api/stock-history', authenticateToken, async (req, res) => {
     try {
-        const history = await db.queryAll('SELECT * FROM StockHistory ORDER BY id DESC');
+        const userId = req.user.id;
+        const history = await db.queryAll('SELECT * FROM StockHistory WHERE user_id = @userId ORDER BY id DESC', { userId });
         res.json({ success: true, history });
     } catch (err) {
         console.error('Get stock history error:', err);
@@ -651,7 +718,8 @@ app.get('/api/stock-history', authenticateToken, async (req, res) => {
 app.delete('/api/stock-history/:id', authenticateToken, async (req, res) => {
     try {
         const logId = req.params.id;
-        await db.executeRun('DELETE FROM StockHistory WHERE id = @id', { id: logId });
+        const userId = req.user.id;
+        await db.executeRun('DELETE FROM StockHistory WHERE id = @id AND user_id = @userId', { id: logId, userId });
         res.json({ success: true, message: 'Stock history log entry deleted successfully!' });
     } catch (err) {
         console.error('Delete stock history error:', err);

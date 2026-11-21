@@ -19,11 +19,24 @@ BEGIN
     CREATE TABLE Users (
         id INT IDENTITY(1,1) PRIMARY KEY,
         username NVARCHAR(50) NOT NULL UNIQUE,
+        gmail NVARCHAR(254) NULL,
         password_hash NVARCHAR(255) NOT NULL,
         full_name NVARCHAR(100) NOT NULL,
         role NVARCHAR(20) DEFAULT 'Admin',
         created_at DATETIME DEFAULT GETDATE()
     );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'gmail')
+BEGIN
+    ALTER TABLE Users ADD gmail NVARCHAR(254) NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID('Users') AND name = 'UX_Users_gmail')
+BEGIN
+    CREATE UNIQUE INDEX UX_Users_gmail ON Users(gmail) WHERE gmail IS NOT NULL;
 END
 GO
 

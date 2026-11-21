@@ -193,6 +193,33 @@ function closeModal(id) {
     document.getElementById(id)?.classList.add('hidden');
 }
 
+function showConfirmDialog(title, message, onConfirm) {
+    const modal = document.getElementById('confirmModal');
+    if (!modal) {
+        if (confirm(`${title}\n${message}`)) {
+            onConfirm();
+        }
+        return;
+    }
+
+    const titleEl = document.getElementById('confirmModalTitle');
+    const msgEl = document.getElementById('confirmModalMessage');
+    if (titleEl) titleEl.innerText = title;
+    if (msgEl) msgEl.innerText = message;
+
+    const actionBtn = document.getElementById('confirmModalActionBtn');
+    if (actionBtn) {
+        const newBtn = actionBtn.cloneNode(true);
+        actionBtn.parentNode.replaceChild(newBtn, actionBtn);
+        newBtn.addEventListener('click', async () => {
+            closeModal('confirmModal');
+            await onConfirm();
+        });
+    }
+
+    openModal('confirmModal');
+}
+
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     const msg = document.getElementById('toastMessage');
@@ -245,10 +272,30 @@ function checkAuth() {
 
         authContainer.classList.add('hidden');
         mainApp.classList.remove('hidden');
-        document.getElementById('userDisplayName').innerText = state.user.fullName || state.user.username;
-        document.getElementById('userRole').innerText = state.user.role || 'Active User';
 
-        // Fetch initial data
+        const displayName = state.user.fullName || state.user.username || 'User';
+        const displayRole = state.user.role || 'Active User';
+
+        if (document.getElementById('userDisplayName')) {
+            document.getElementById('userDisplayName').innerText = displayName;
+        }
+        if (document.getElementById('userRole')) {
+            document.getElementById('userRole').innerText = displayRole;
+        }
+
+        const avatarEl = document.querySelector('.user-avatar');
+        if (avatarEl) {
+            const initials = displayName
+                .split(' ')
+                .filter(Boolean)
+                .map(n => n[0])
+                .join('')
+                .substring(0, 2)
+                .toUpperCase() || 'U';
+            avatarEl.innerText = initials;
+        }
+
+        // Fetch initial data for this specific user account
         fetchDashboardStats();
         fetchProducts();
         fetchOrderHistory();
@@ -293,12 +340,18 @@ async function handleLogin(e) {
         const data = await res.json();
 
         if (data.success) {
+            // Reset in-memory state cleanly before loading the new user's dashboard
+            state.products = [];
+            state.orders = [];
+            state.stockHistory = [];
+            state.cart = [];
+
             state.token = data.token;
             state.user = data.user;
             localStorage.setItem('sh_token', data.token);
             localStorage.setItem('sh_user', JSON.stringify(data.user));
 
-            showToast('Login successful! Welcome to Sensometric Specialities.', 'success');
+            showToast(`Welcome back, ${data.user.fullName || data.user.username}!`, 'success');
             checkAuth();
         } else {
             showToast(data.message, 'error');
@@ -311,6 +364,7 @@ async function handleLogin(e) {
 async function handleRegister(e) {
     e.preventDefault();
     const fullName = document.getElementById('regFullName').value.trim();
+    const gmail = document.getElementById('regGmail').value.trim();
     const username = document.getElementById('regUsername').value.trim();
     const password = document.getElementById('regPassword').value;
 
@@ -318,7 +372,7 @@ async function handleRegister(e) {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, username, password })
+            body: JSON.stringify({ fullName, gmail, username, password })
         });
         const data = await res.json();
 
@@ -339,8 +393,26 @@ async function handleRegister(e) {
 function handleLogout(showNotification = true) {
     state.token = null;
     state.user = null;
+    state.products = [];
+    state.orders = [];
+    state.stockHistory = [];
+    state.cart = [];
     localStorage.removeItem('sh_token');
     localStorage.removeItem('sh_user');
+
+    // Reset KPI cards to 0
+    if (document.getElementById('kpiTotalSalesPaid')) document.getElementById('kpiTotalSalesPaid').innerText = 'Rs.0.00';
+    if (document.getElementById('kpiMarketPendingUdhaar')) document.getElementById('kpiMarketPendingUdhaar').innerText = 'Rs.0.00';
+    if (document.getElementById('kpiTotalOrdersLogged')) document.getElementById('kpiTotalOrdersLogged').innerText = '0';
+    if (document.getElementById('kpiTotalProductsCount')) document.getElementById('kpiTotalProductsCount').innerText = '0';
+    if (document.getElementById('kpiTotalStockUnits')) document.getElementById('kpiTotalStockUnits').innerText = '0';
+    if (document.getElementById('kpiLowStockAlerts')) document.getElementById('kpiLowStockAlerts').innerText = '0';
+
+    // Clear tables
+    renderInventoryTable();
+    renderOrderHistory();
+    renderStockHistoryTable();
+
     if (showNotification) {
         showToast('Logged out successfully.', 'info');
     }
@@ -514,8 +586,8 @@ function renderInventoryTable() {
                     <button class="btn btn-outline-sm" onclick="editProduct(${p.id})" title="Edit Product">
                         <i class="fa-solid fa-pen"></i> Edit
                     </button>
-                    <button class="btn btn-outline-sm text-danger" onclick="deleteProduct(${p.id})" title="Delete Product">
-                        <i class="fa-solid fa-trash"></i>
+                    <button class="btn btn-outline-sm text-danger" onclick="deleteProduct(${p.id}, '${escapeHtml(p.name).replace(/'/g, "\\'")}')" title="Delete Product">
+                        <i class="fa-solid fa-trash"></i> Delete
                     </button>
                 </td>
             </tr>
@@ -616,26 +688,28 @@ async function handleStockSubmit(e) {
     }
 }
 
-async function deleteProduct(id) {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+async function deleteProduct(id, productName) {
+    const name = productName || 'this product';
+    showConfirmDialog('Delete Product?', `Are you sure you want to delete "${name}" from inventory?`, async () => {
+        try {
+            const res = await fetch(`/api/products/${id}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            const data = await res.json();
 
-    try {
-        const res = await fetch(`/api/products/${id}`, {
-            method: 'DELETE',
-            headers: authHeaders()
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            showToast(data.message, 'success');
-            fetchProducts();
-            fetchDashboardStats();
-        } else {
-            showToast(data.message, 'error');
+            if (data.success) {
+                showToast(data.message, 'success');
+                fetchProducts();
+                fetchDashboardStats();
+                fetchStockHistory();
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Error deleting product.', 'error');
         }
-    } catch (err) {
-        showToast('Error deleting product.', 'error');
-    }
+    });
 }
 
 // ----------------------------------------------------
@@ -828,25 +902,28 @@ async function markOrderAsPaid(orderId) {
 }
 
 async function deleteOrder(orderId, orderNum) {
-    if (!confirm(`Are you sure you want to delete order #${orderNum || orderId}? This action cannot be undone.`)) return;
+    const num = orderNum || orderId;
+    showConfirmDialog('Delete Order?', `Are you sure you want to delete Order #${num}? This will restore the product stock and remove the order permanently.`, async () => {
+        try {
+            const res = await fetch(`/api/orders/${orderId}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            const data = await res.json();
 
-    try {
-        const res = await fetch(`/api/orders/${orderId}`, {
-            method: 'DELETE',
-            headers: authHeaders()
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            showToast(data.message, 'success');
-            fetchOrderHistory();
-            fetchDashboardStats();
-        } else {
-            showToast(data.message, 'error');
+            if (data.success) {
+                showToast(data.message, 'success');
+                fetchOrderHistory();
+                fetchProducts();
+                fetchDashboardStats();
+                fetchStockHistory();
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Error deleting order.', 'error');
         }
-    } catch (err) {
-        showToast('Error deleting order.', 'error');
-    }
+    });
 }
 
 // ----------------------------------------------------
@@ -1030,24 +1107,24 @@ function renderStockHistoryTable() {
 }
 
 async function deleteStockHistoryEntry(logId) {
-    if (!confirm('Are you sure you want to delete this stock history log entry?')) return;
+    showConfirmDialog('Delete Stock History Entry?', `Are you sure you want to delete stock history log entry #${logId}?`, async () => {
+        try {
+            const res = await fetch(`/api/stock-history/${logId}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            const data = await res.json();
 
-    try {
-        const res = await fetch(`/api/stock-history/${logId}`, {
-            method: 'DELETE',
-            headers: authHeaders()
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            showToast('Stock history log entry deleted!', 'success');
-            fetchStockHistory();
-        } else {
-            showToast(data.message, 'error');
+            if (data.success) {
+                showToast('Stock history log entry deleted!', 'success');
+                fetchStockHistory();
+            } else {
+                showToast(data.message, 'error');
+            }
+        } catch (err) {
+            showToast('Error deleting stock history entry.', 'error');
         }
-    } catch (err) {
-        showToast('Error deleting stock history entry.', 'error');
-    }
+    });
 }
 
 // ----------------------------------------------------

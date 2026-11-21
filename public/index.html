@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles.css?v=5.5">
+    <link rel="stylesheet" href="styles.css?v=5.8">
 </head>
 <body class="dark-theme">
 
@@ -53,6 +53,12 @@
                 </div>
 
                 <div class="input-group">
+                    <label for="regGmail"><i class="fa-solid fa-envelope"></i> Gmail Address</label>
+                    <input type="email" id="regGmail" placeholder="you@gmail.com" required autocomplete="email">
+                    <small class="auth-field-hint">Use a Gmail address. Sign in later with your username and password.</small>
+                </div>
+
+                <div class="input-group">
                     <label for="regUsername"><i class="fa-solid fa-user-gear"></i> Set Username</label>
                     <input type="text" id="regUsername" placeholder="Choose a username" required autocomplete="username">
                 </div>
@@ -71,6 +77,8 @@
                     <button type="button" id="showLoginBtn" class="btn-link">Back to Login</button>
                 </div>
             </form>
+
+            <p class="creator-credit">Created by <strong>Haider Abbas</strong></p>
         </div>
     </div>
 
@@ -136,6 +144,8 @@
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign Out
                 </button>
             </div>
+
+            <p class="sidebar-credit">Created by <strong>Haider Abbas</strong></p>
         </aside>
 
         <!-- MAIN CONTENT AREA -->
@@ -586,12 +596,29 @@
         </div>
     </div>
 
+    <!-- MODAL: CONFIRM DELETE (Glassy V5 Dialog) -->
+    <div id="confirmModal" class="modal-overlay hidden">
+        <div class="modal-card portal-card modal-sm" style="text-align: center; max-width: 380px;">
+            <div style="font-size: 38px; color: #A31C1B; margin-bottom: 12px; filter: drop-shadow(0 0 10px rgba(163, 28, 27, 0.4));">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 id="confirmModalTitle" style="font-size: 18px; font-weight: 800; margin-bottom: 8px;">Are you sure?</h3>
+            <p id="confirmModalMessage" style="font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">This action cannot be undone.</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn btn-outline-sm" onclick="closeModal('confirmModal')">Cancel</button>
+                <button type="button" id="confirmModalActionBtn" class="btn" style="background: linear-gradient(135deg, #A31C1B, #ef4444); color: #fff; border: none; box-shadow: 0 4px 14px rgba(163, 28, 27, 0.4);">
+                    <i class="fa-solid fa-trash"></i> Yes, Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="toast hidden">
         <i id="toastIcon" class="fa-solid fa-circle-check"></i>
         <span id="toastMessage">Notification message</span>
     </div>
 
-    <script src="app.js?v=5.5"></script>
+    <script src="app.js?v=5.8"></script>
 </body>
 </html>
