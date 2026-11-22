@@ -98,12 +98,15 @@ function authenticateToken(req, res, next) {
 // SYSTEM & DB STATUS API
 // ----------------------------------------------------
 app.get('/api/status', (req, res) => {
+    const dbType = db.getDBType();
     res.json({
         success: true,
-        dbType: db.getDBType(),
-        message: db.getDBType() === 'MSSQL' 
+        dbType,
+        message: dbType === 'MSSQL'
             ? 'Connected to Microsoft SQL Server (SSMS)' 
-            : 'Using Embedded Local Database (SQLite)'
+            : dbType === 'POSTGRES'
+                ? 'Connected to PostgreSQL database.'
+                : 'Using Embedded Local Database (SQLite)'
     });
 });
 
