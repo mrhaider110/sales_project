@@ -1112,28 +1112,30 @@ async function showInvoiceReceipt(orderId) {
                     </div>
                 </div>
 
-                <table class="invoice-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Item Description</th>
-                            <th>Qty</th>
-                            <th>Unit Price</th>
-                            <th>Subtotal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${items.map((item, idx) => `
+                <div class="invoice-table-wrap">
+                    <table class="invoice-table">
+                        <thead>
                             <tr>
-                                <td>${idx + 1}</td>
-                                <td><strong>${escapeHtml(item.product_name)}</strong></td>
-                                <td>${item.quantity}</td>
-                                <td>Rs.${parseFloat(item.unit_price).toFixed(2)}</td>
-                                <td>Rs.${parseFloat(item.subtotal).toFixed(2)}</td>
+                                <th>#</th>
+                                <th>Item Description</th>
+                                <th>Qty</th>
+                                <th>Unit Price</th>
+                                <th>Subtotal</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            ${items.map((item, idx) => `
+                                <tr>
+                                    <td>${idx + 1}</td>
+                                    <td><strong>${escapeHtml(item.product_name)}</strong></td>
+                                    <td>${item.quantity}</td>
+                                    <td>Rs.${parseFloat(item.unit_price).toFixed(2)}</td>
+                                    <td>Rs.${parseFloat(item.subtotal).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
 
                 <div class="invoice-totals-box">
                     <div class="flex-between"><span>Items Subtotal:</span> <span>Rs.${subtotal.toFixed(2)}</span></div>

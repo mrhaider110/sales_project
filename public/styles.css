@@ -84,17 +84,46 @@ body.dark-theme {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
+html,
+body {
+    width: 100%;
+    min-width: 320px;
+}
+
 body {
     background-color: var(--bg-base);
     color: var(--text-main);
     min-height: 100vh;
-    overflow-x: hidden;
+    overflow-x: clip;
     position: relative;
     background-image: 
         radial-gradient(circle at 10% 15%, rgba(11, 28, 52, 0.1) 0%, transparent 45%),
         radial-gradient(circle at 90% 85%, rgba(143, 207, 255, 0.08) 0%, transparent 45%),
         radial-gradient(circle at 50% 50%, rgba(16, 33, 58, 0.03) 0%, transparent 100%);
     background-attachment: fixed;
+}
+
+img,
+picture,
+svg,
+video,
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+input,
+select,
+textarea,
+button {
+    max-width: 100%;
+}
+
+.app-layout,
+.main-content,
+.accordion-card,
+.accordion-body {
+    min-width: 0;
 }
 
 body.dark-theme {
@@ -1465,7 +1494,10 @@ body.dark-theme .search-input-box input {
 
 .table-responsive {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
 }
 
 .portal-table {
@@ -1641,6 +1673,14 @@ body.dark-theme .modal-card {
     margin-top: 24px;
 }
 
+.confirm-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 /* 18% GST Printable Invoice Styling */
 .invoice-container {
     background: #ffffff;
@@ -1677,8 +1717,16 @@ body.dark-theme .modal-card {
 
 .invoice-table {
     width: 100%;
+    min-width: 560px;
     border-collapse: collapse;
     margin-bottom: 16px;
+}
+
+.invoice-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
 }
 
 .invoice-table th, .invoice-table td {
@@ -1691,7 +1739,8 @@ body.dark-theme .modal-card {
 
 .invoice-totals-box {
     float: right;
-    width: 250px;
+    width: 100%;
+    max-width: 250px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1759,5 +1808,375 @@ body.dark-theme .modal-card {
     .btn:hover,
     .btn:active {
         transform: none !important;
+    }
+}
+
+@media (max-width: 992px) {
+    .liquid-glass-sidebar {
+        width: 220px;
+        min-width: 220px;
+        padding-inline: 12px;
+    }
+
+    .main-content {
+        padding-inline: 16px;
+    }
+
+    .top-header {
+        gap: 16px;
+        padding-inline: 18px;
+    }
+
+    .header-brand-title {
+        min-width: 0;
+    }
+
+    .header-brand-title h1 {
+        font-size: clamp(1rem, 2vw, 1.125rem);
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        background-attachment: scroll;
+    }
+
+    .app-layout {
+        flex-direction: column;
+    }
+
+    .liquid-glass-sidebar {
+        width: auto;
+        min-width: 0;
+        margin: 12px 12px 0;
+        padding: 16px;
+    }
+
+    .window-controls,
+    .sidebar-credit {
+        display: none;
+    }
+
+    .sidebar-brand,
+    .sidebar-search {
+        margin-bottom: 12px;
+    }
+
+    .menu-label {
+        margin-bottom: 8px;
+    }
+
+    .liquid-glass-dock {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        flex: 0 0 auto;
+        gap: 8px;
+    }
+
+    .nav-item {
+        min-width: 0;
+        min-height: 44px;
+        padding: 10px;
+    }
+
+    .nav-item span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .sidebar-user {
+        margin-top: 12px;
+    }
+
+    .main-content {
+        width: 100%;
+        padding: 0 12px 12px;
+        overflow: visible;
+    }
+
+    .top-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        padding: 16px;
+    }
+
+    .header-brand-title {
+        flex: 1 1 100%;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .accordion-header {
+        padding: 16px;
+    }
+
+    .accordion-title {
+        min-width: 0;
+    }
+
+    .accordion-title h2 {
+        overflow-wrap: anywhere;
+    }
+
+    .accordion-body {
+        padding: 16px;
+    }
+
+    .toolbar-flex {
+        align-items: stretch;
+    }
+
+    .search-input-box {
+        width: 100%;
+        min-width: 0;
+        flex-basis: 100%;
+    }
+
+    .toolbar-btns {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-btns > * {
+        min-width: 0;
+        flex: 1 1 140px;
+    }
+}
+
+@media (max-width: 600px) {
+    .auth-wrapper {
+        min-height: 100vh;
+        padding: 16px;
+    }
+
+    .auth-card {
+        padding: 28px 20px;
+    }
+
+    .app-layout,
+    .main-content {
+        width: 100%;
+    }
+
+    .liquid-glass-sidebar {
+        margin: 10px 10px 0;
+        padding: 14px;
+    }
+
+    .sidebar-user {
+        flex-wrap: wrap;
+    }
+
+    .user-info {
+        min-width: 80px;
+    }
+
+    .btn-signout {
+        min-height: 44px;
+        margin-left: auto;
+        padding-inline: 10px;
+    }
+
+    .main-content {
+        padding: 0 10px 10px;
+    }
+
+    .top-header {
+        padding: 14px;
+    }
+
+    .header-brand-title {
+        gap: 10px;
+    }
+
+    .header-brand-title h1 {
+        font-size: clamp(0.95rem, 4vw, 1.1rem);
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .header-actions .btn-outline-sm {
+        flex: 1 1 100px;
+        justify-content: center;
+    }
+
+    .btn,
+    .btn-outline-sm,
+    .btn-icon-sm {
+        min-height: 44px;
+    }
+
+    .btn-outline-sm {
+        padding: 10px 12px;
+    }
+
+    .btn-icon-sm {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-link,
+    .btn-text-sm {
+        min-height: 44px;
+        padding: 8px;
+    }
+
+    .close-modal-btn {
+        display: inline-flex;
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .input-group input,
+    .select-sm,
+    .input-sm,
+    .pill-input-box input,
+    .pill-select,
+    .search-input-box input,
+    .sidebar-search input {
+        font-size: 16px;
+    }
+
+    .form-row-2 {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .form-options-row {
+        gap: 14px;
+    }
+
+    .custom-check-label input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 20px;
+    }
+
+    .order-cart-section {
+        padding: 12px;
+    }
+
+    .total-payable-box {
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .total-label {
+        font-size: 14px;
+    }
+
+    .total-amount-val {
+        font-size: 20px;
+        text-align: right;
+    }
+
+    .reports-filter-grid,
+    .audit-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .monthly-audit-panel {
+        padding: 14px;
+    }
+
+    .monthly-audit-controls {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .monthly-audit-controls input[type="month"],
+    .monthly-audit-controls button {
+        min-width: 0;
+        flex: 1 1 130px;
+    }
+
+    .monthly-audit-controls input[type="month"] {
+        width: 100%;
+    }
+
+    .modal-overlay {
+        align-items: flex-start;
+        overflow-y: auto;
+        padding: 8px;
+    }
+
+    .modal-card {
+        width: 100%;
+        max-height: calc(100vh - 16px);
+        margin: auto;
+        overflow-y: auto;
+        padding: 16px;
+    }
+
+    .modal-header {
+        gap: 10px;
+    }
+
+    .modal-header h3 {
+        font-size: 15px;
+    }
+
+    .modal-footer,
+    .confirm-modal-actions {
+        flex-wrap: wrap;
+    }
+
+    .modal-footer > *,
+    .confirm-modal-actions > * {
+        flex: 1 1 120px;
+    }
+
+    .invoice-container {
+        padding: 12px;
+    }
+
+    .invoice-header-box h2 {
+        font-size: 18px;
+    }
+
+    .invoice-meta-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .invoice-meta-grid p {
+        overflow-wrap: anywhere;
+    }
+
+    .invoice-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .invoice-totals-box {
+        max-width: 100%;
+    }
+
+    .flex-between {
+        gap: 12px;
+    }
+
+    .toast {
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        max-width: none;
+        padding: 12px 16px;
+        overflow-wrap: anywhere;
     }
 }
