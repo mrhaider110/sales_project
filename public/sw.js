@@ -1,13 +1,14 @@
-const CACHE_NAME = 'sensometric-shell-v2';
+const CACHE_NAME = 'sensometric-shell-v3';
 const STATIC_PATHS = new Set([
     '/index.html',
     '/styles.css',
     '/app.js',
     '/manifest.webmanifest',
     '/sensometric-logo.png',
-    '/sensometric-logo.svg',
     '/icon-192.png',
-    '/icon-512.png'
+    '/icon-512.png',
+    '/apple-touch-icon.png',
+    '/favicon-32.png'
 ]);
 
 function cacheResponse(request, response, errorMessage) {
