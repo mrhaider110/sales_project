@@ -2472,3 +2472,28 @@ body.dark-theme .modal-card {
         transition: none !important;
     }
 }
+
+.auth-card > .install-app-btn {
+    margin-top: 18px;
+}
+
+.install-app-btn {
+    gap: 8px;
+}
+
+.install-instructions {
+    margin: 8px 0 16px;
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.install-offline-note {
+    padding: 10px 12px;
+    border-left: 3px solid #8fcfff;
+    border-radius: 0 8px 8px 0;
+    background: rgba(143, 207, 255, 0.1);
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}

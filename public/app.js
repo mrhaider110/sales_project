@@ -42,8 +42,70 @@ function escapeHtml(str) {
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupEventListeners();
+    setupInstallExperience();
     checkAuth();
 });
+
+let deferredInstallPrompt = null;
+
+function setupInstallExperience() {
+    const installButtons = document.querySelectorAll('.install-app-btn');
+    const installHelp = document.getElementById('installInstructions');
+    const isInstalled = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    const updateInstallButtons = () => {
+        installButtons.forEach(button => button.classList.toggle('hidden', isInstalled()));
+    };
+
+    updateInstallButtons();
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+    });
+
+    installButtons.forEach(button => {
+        button.addEventListener('click', async () => {
+            if (!deferredInstallPrompt) {
+                if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) {
+                    installHelp.innerText = 'In Safari, tap Share, then choose Add to Home Screen.';
+                } else if (/Android/i.test(navigator.userAgent)) {
+                    installHelp.innerText = 'In Chrome, open the menu and choose Install app or Add to Home screen.';
+                } else {
+                    installHelp.innerText = 'Use your browser’s install icon or menu and choose Install app or Add to Home screen.';
+                }
+                openModal('installHelpModal');
+                return;
+            }
+
+            const promptEvent = deferredInstallPrompt;
+            deferredInstallPrompt = null;
+            try {
+                await promptEvent.prompt();
+                const choice = await promptEvent.userChoice;
+                if (choice.outcome === 'accepted') {
+                    installButtons.forEach(installButton => installButton.classList.add('hidden'));
+                    showToast('Sensometric was added to your home screen.', 'success');
+                }
+            } catch (error) {
+                console.error('Unable to open the app install prompt:', error);
+                showToast('The install prompt could not be opened. Use your browser menu to install the app.', 'warning');
+            }
+        });
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        updateInstallButtons();
+    });
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(error => {
+                console.error('Unable to register the app service worker:', error);
+            });
+        });
+    }
+}
 
 // Theme Setup
 function initTheme() {
