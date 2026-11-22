@@ -4,20 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensometric Specialities | Sales and Distribution</title>
+    <meta name="theme-color" content="#edf2f8">
+    <link rel="icon" type="image/png" href="/sensometric-logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles.css?v=5.8">
+    <link rel="stylesheet" href="styles.css?v=6.2">
 </head>
-<body class="dark-theme">
+<body class="light-theme">
 
     <!-- LOGIN & SIGNUP SCREEN -->
     <div id="authContainer" class="auth-wrapper">
         <div class="auth-card liquid-glass">
             <div class="auth-header">
                 <div class="logo-box">
-                    <i class="fa-solid fa-store"></i>
+                    <img class="brand-mark" src="/sensometric-logo.png" alt="Sensometric Specialities">
                 </div>
                 <h2>Sensometric <span class="accent-text">Specialities</span></h2>
                 <p id="authSubtitle">Sales and Distribution</p>
@@ -27,12 +29,12 @@
             <form id="loginForm" class="auth-form">
                 <div class="input-group">
                     <label for="loginUsername"><i class="fa-solid fa-user"></i> Username</label>
-                    <input type="text" id="loginUsername" placeholder="Enter username (default: admin)" required autocomplete="username">
+                    <input type="text" id="loginUsername" placeholder="Enter your username" required autocomplete="username">
                 </div>
 
                 <div class="input-group">
                     <label for="loginPassword"><i class="fa-solid fa-lock"></i> Password</label>
-                    <input type="password" id="loginPassword" placeholder="Enter password (default: admin123)" required autocomplete="current-password">
+                    <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block">
@@ -95,7 +97,7 @@
 
             <div class="sidebar-brand">
                 <div class="brand-icon-box">
-                    <i class="fa-solid fa-store"></i>
+                    <img class="brand-mark" src="/sensometric-logo.png" alt="">
                 </div>
                 <h3>Admin</h3>
             </div>
@@ -132,6 +134,11 @@
                     <i class="fa-solid fa-filter"></i>
                     <span>Filters & Reports</span>
                 </button>
+
+                <button class="nav-item" data-tab="monthlyAudit" data-target="accordion-monthlyAudit">
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
+                    <span>Monthly Audit</span>
+                </button>
             </nav>
 
             <div class="sidebar-user liquid-glass-pill">
@@ -155,7 +162,7 @@
             <header class="top-header portal-card">
                 <div class="header-brand-title">
                     <div class="store-badge-icon">
-                        <i class="fa-solid fa-shop"></i>
+                        <img class="brand-mark" src="/sensometric-logo.png" alt="">
                     </div>
                     <div>
                         <h1>SENSOMETRIC SPECIALITIES</h1>
@@ -170,7 +177,7 @@
                     <button id="printPageBtn" class="btn btn-outline-sm" onclick="window.print()">
                         <i class="fa-solid fa-print"></i> Print
                     </button>
-                    <button id="themeToggleBtn" class="btn-icon-sm" title="Toggle Light/Dark Theme">
+                    <button id="themeToggleBtn" class="btn-icon-sm" title="Switch to dark theme" aria-label="Switch to dark theme">
                         <i class="fa-solid fa-moon"></i>
                     </button>
                 </div>
@@ -491,6 +498,85 @@
                                 </button>
                             </div>
                         </div>
+
+                    </div>
+                </div>
+
+                <!-- MONTHLY SALES AND STOCK AUDIT -->
+                <div class="accordion-card portal-card collapsed" id="accordion-monthlyAudit">
+                    <div class="accordion-header" onclick="toggleAccordion('accordion-monthlyAudit')">
+                        <div class="accordion-title">
+                            <i class="fa-solid fa-file-invoice-dollar accordion-icon"></i>
+                            <h2>Monthly Sales &amp; Stock Audit</h2>
+                        </div>
+                        <i class="fa-solid fa-chevron-down accordion-chevron"></i>
+                    </div>
+
+                    <div class="accordion-body">
+                        <section id="monthlyAuditPanel" class="monthly-audit-panel">
+                            <div class="monthly-audit-header">
+                                <div>
+                                    <h3>Monthly Audit Report</h3>
+                                    <p id="auditPeriodLabel" class="audit-period-label">Choose a month to review sales and stock purchases.</p>
+                                </div>
+                                <div class="monthly-audit-controls no-print">
+                                    <label class="sr-only" for="auditMonth">Audit month</label>
+                                    <input type="month" id="auditMonth" class="select-sm">
+                                    <button id="generateMonthlyAuditBtn" class="btn btn-primary">
+                                        <i class="fa-solid fa-magnifying-glass-chart"></i> Generate
+                                    </button>
+                                    <button id="downloadMonthlyAuditBtn" class="btn btn-outline-sm" disabled>
+                                        <i class="fa-solid fa-file-csv"></i> Download CSV
+                                    </button>
+                                    <button id="printMonthlyAuditBtn" class="btn btn-outline-sm" disabled>
+                                        <i class="fa-solid fa-print"></i> Print
+                                    </button>
+                                </div>
+                            </div>
+                            <p id="monthlyAuditMessage" class="monthly-audit-message" aria-live="polite">
+                                Select a month and generate the audit report.
+                            </p>
+                            <div id="monthlyAuditResults" class="hidden">
+                                <div id="monthlyAuditSummary" class="audit-summary-grid"></div>
+                                <p id="monthlyAuditCostNotice" class="audit-cost-notice hidden"></p>
+
+                                <h4>Sales in this month</h4>
+                                <div class="table-responsive audit-table-wrap">
+                                    <table class="portal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>DATE</th>
+                                                <th>ORDER</th>
+                                                <th>CUSTOMER</th>
+                                                <th>ITEMS SOLD</th>
+                                                <th>GST</th>
+                                                <th>GST AMOUNT (RS.)</th>
+                                                <th>PAYMENT</th>
+                                                <th>TOTAL (RS.)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="monthlyAuditSalesBody"></tbody>
+                                    </table>
+                                </div>
+
+                                <h4>Stock purchased in this month</h4>
+                                <div class="table-responsive audit-table-wrap">
+                                    <table class="portal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>DATE</th>
+                                                <th>PRODUCT</th>
+                                                <th>QUANTITY</th>
+                                                <th>UNIT COST (RS.)</th>
+                                                <th>PURCHASE TOTAL (RS.)</th>
+                                                <th>NOTES</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="monthlyAuditPurchasesBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
 
@@ -559,7 +645,13 @@
 
                 <div class="input-group">
                     <label for="stockAdjustment">Qty to Add (+) or Deduct (-)</label>
-                    <input type="number" id="stockAdjustment" placeholder="e.g. +10 or -5" required>
+                    <input type="number" id="stockAdjustment" placeholder="e.g. +10 or -5" step="1" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="stockPurchaseUnitCost">Purchase cost per unit (Rs.)</label>
+                    <input type="number" id="stockPurchaseUnitCost" min="0" step="0.01" placeholder="Required when adding purchased stock">
+                    <small class="auth-field-hint">Required for positive stock additions so purchase costs appear in monthly audits.</small>
                 </div>
 
                 <div class="input-group">
@@ -619,6 +711,6 @@
         <span id="toastMessage">Notification message</span>
     </div>
 
-    <script src="app.js?v=5.8"></script>
+    <script src="app.js?v=6.2"></script>
 </body>
 </html>

@@ -104,8 +104,22 @@ BEGIN
         quantity_change INT NOT NULL,
         change_type NVARCHAR(50) NOT NULL,
         notes NVARCHAR(255) DEFAULT '',
+        purchase_unit_cost DECIMAL(18, 2) NULL,
+        purchase_total DECIMAL(18, 2) NULL,
         created_at DATETIME DEFAULT GETDATE()
     );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('StockHistory') AND name = 'purchase_unit_cost')
+BEGIN
+    ALTER TABLE StockHistory ADD purchase_unit_cost DECIMAL(18, 2) NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('StockHistory') AND name = 'purchase_total')
+BEGIN
+    ALTER TABLE StockHistory ADD purchase_total DECIMAL(18, 2) NULL;
 END
 GO
 

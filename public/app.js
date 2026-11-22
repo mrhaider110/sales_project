@@ -11,6 +11,7 @@ const state = {
     products: [],
     orders: [],
     stockHistory: [],
+    monthlyAudit: null,
     cart: [],
     activeTab: 'createOrder'
 };
@@ -46,15 +47,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Theme Setup
 function initTheme() {
-    const savedTheme = localStorage.getItem('sh_theme') || 'dark-theme';
-    document.body.className = savedTheme;
+    const savedTheme = localStorage.getItem('sh_theme');
+    document.body.className = savedTheme === 'dark-theme' ? 'dark-theme' : 'light-theme';
     updateThemeIcon();
 }
 
 function updateThemeIcon() {
-    const icon = document.querySelector('#themeToggleBtn i');
+    const toggleButton = document.getElementById('themeToggleBtn');
+    const icon = toggleButton?.querySelector('i');
+    const isLightTheme = document.body.classList.contains('light-theme');
+
     if (icon) {
-        icon.className = document.body.classList.contains('light-theme') ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+        icon.className = isLightTheme ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+    }
+
+    if (toggleButton) {
+        toggleButton.title = isLightTheme ? 'Switch to dark theme' : 'Switch to light theme';
+        toggleButton.setAttribute('aria-label', toggleButton.title);
+    }
+
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) {
+        themeColor.content = isLightTheme ? '#edf2f8' : '#0b182c';
     }
 }
 
@@ -137,12 +151,15 @@ function setupEventListeners() {
         document.getElementById('modalProductTitle').innerText = 'Add New Product to Inventory';
         document.getElementById('productForm').reset();
         document.getElementById('prodId').value = '';
+        updateProductCostRequirement();
         openModal('productModal');
     });
 
     // Product & Stock Form Submit
     document.getElementById('productForm')?.addEventListener('submit', handleProductSubmit);
+    document.getElementById('prodStock')?.addEventListener('input', updateProductCostRequirement);
     document.getElementById('stockForm')?.addEventListener('submit', handleStockSubmit);
+    document.getElementById('stockAdjustment')?.addEventListener('input', updateStockPurchaseCostRequirement);
 
     // Create Order Form submission & calculation
     document.getElementById('createOrderForm')?.addEventListener('submit', handleCreateOrderSubmit);
@@ -172,6 +189,12 @@ function setupEventListeners() {
     // Export Buttons
     document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
     document.getElementById('exportCsvBtn')?.addEventListener('click', exportToExcel);
+    const now = new Date();
+    document.getElementById('auditMonth').value =
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.getElementById('generateMonthlyAuditBtn')?.addEventListener('click', generateMonthlyAudit);
+    document.getElementById('downloadMonthlyAuditBtn')?.addEventListener('click', downloadMonthlyAudit);
+    document.getElementById('printMonthlyAuditBtn')?.addEventListener('click', printMonthlyAudit);
 }
 
 // ----------------------------------------------------
@@ -344,6 +367,8 @@ async function handleLogin(e) {
             state.products = [];
             state.orders = [];
             state.stockHistory = [];
+            state.monthlyAudit = null;
+            document.getElementById('monthlyAuditResults')?.classList.add('hidden');
             state.cart = [];
 
             state.token = data.token;
@@ -644,7 +669,17 @@ function editProduct(id) {
     document.getElementById('prodStock').value = prod.stock_quantity;
     document.getElementById('prodMinAlert').value = prod.min_stock_alert;
 
+    updateProductCostRequirement();
     openModal('productModal');
+}
+
+function updateProductCostRequirement() {
+    const isNewProduct = !document.getElementById('prodId')?.value;
+    const initialStock = Number(document.getElementById('prodStock')?.value);
+    const costInput = document.getElementById('prodCost');
+    if (costInput) {
+        costInput.required = isNewProduct && Number.isFinite(initialStock) && initialStock > 0;
+    }
 }
 
 function openStockModal(id) {
@@ -656,21 +691,32 @@ function openStockModal(id) {
     document.getElementById('stockCurrentQty').innerText = prod.stock_quantity;
     document.getElementById('stockAdjustment').value = '';
     document.getElementById('stockNotes').value = '';
+    document.getElementById('stockPurchaseUnitCost').value = '';
+    updateStockPurchaseCostRequirement();
 
     openModal('stockModal');
+}
+
+function updateStockPurchaseCostRequirement() {
+    const adjustment = Number(document.getElementById('stockAdjustment')?.value);
+    const costInput = document.getElementById('stockPurchaseUnitCost');
+    if (!costInput) return;
+
+    costInput.required = Number.isFinite(adjustment) && adjustment > 0;
 }
 
 async function handleStockSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('stockProdId').value;
     const adjustmentQuantity = document.getElementById('stockAdjustment').value;
+    const purchaseUnitCost = document.getElementById('stockPurchaseUnitCost').value;
     const notes = document.getElementById('stockNotes').value.trim();
 
     try {
         const res = await fetch(`/api/products/${id}/stock`, {
             method: 'PUT',
             headers: authHeaders(),
-            body: JSON.stringify({ adjustmentQuantity, notes })
+            body: JSON.stringify({ adjustmentQuantity, purchaseUnitCost, notes })
         });
         const data = await res.json();
 
@@ -1125,6 +1171,215 @@ async function deleteStockHistoryEntry(logId) {
             showToast('Error deleting stock history entry.', 'error');
         }
     });
+}
+
+async function generateMonthlyAudit() {
+    const monthInput = document.getElementById('auditMonth');
+    const month = monthInput.value;
+    const message = document.getElementById('monthlyAuditMessage');
+    const results = document.getElementById('monthlyAuditResults');
+    const downloadButton = document.getElementById('downloadMonthlyAuditBtn');
+    const printButton = document.getElementById('printMonthlyAuditBtn');
+
+    if (!month) {
+        showToast('Choose a month to generate the audit report.', 'warning');
+        return;
+    }
+
+    state.monthlyAudit = null;
+    results.classList.add('hidden');
+    downloadButton.disabled = true;
+    printButton.disabled = true;
+    message.textContent = 'Generating monthly audit...';
+
+    try {
+        const res = await fetch(`/api/reports/monthly-audit?month=${encodeURIComponent(month)}`, {
+            headers: authHeaders()
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            message.textContent = data.message || 'Could not generate the monthly audit report.';
+            showToast(message.textContent, 'error');
+            return;
+        }
+
+        state.monthlyAudit = data.report;
+        renderMonthlyAudit(data.report);
+        results.classList.remove('hidden');
+        downloadButton.disabled = false;
+        printButton.disabled = false;
+        message.textContent = `Audit report generated for ${formatAuditMonth(month)}.`;
+    } catch (err) {
+        message.textContent = 'Connection error while generating the monthly audit report.';
+        showToast(message.textContent, 'error');
+    }
+}
+
+function formatAuditMoney(value) {
+    return `Rs.${Number(value || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    })}`;
+}
+
+function formatAuditMonth(month) {
+    const [year, monthNumber] = month.split('-').map(Number);
+    return new Date(year, monthNumber - 1, 1).toLocaleDateString(undefined, {
+        month: 'long',
+        year: 'numeric'
+    });
+}
+
+function formatAuditDate(value) {
+    return value ? new Date(value).toLocaleDateString() : '-';
+}
+
+function renderMonthlyAudit(report) {
+    const summary = report.summary;
+    const cards = [
+        ['Sales orders', summary.orderCount],
+        ['Total sales', formatAuditMoney(summary.totalSales)],
+        ['Sales with GST', formatAuditMoney(summary.salesWithGst)],
+        ['Sales without GST', formatAuditMoney(summary.salesWithoutGst)],
+        ['GST collected', formatAuditMoney(summary.gstCollected)],
+        ['Orders with GST', summary.gstSalesCount],
+        ['Orders without GST', summary.nonGstSalesCount],
+        ['Paid sales', formatAuditMoney(summary.paidSales)],
+        ['Credit sales', formatAuditMoney(summary.creditSales)],
+        ['Items sold', summary.totalItemsSold],
+        ['Stock purchase cost', formatAuditMoney(summary.stockPurchaseCost)],
+        ['Stock purchased', summary.stockPurchaseQuantity],
+        ['Purchase entries', summary.stockPurchaseEntries]
+    ];
+
+    document.getElementById('auditPeriodLabel').textContent =
+        `Sales and stock purchase audit for ${formatAuditMonth(report.month)}.`;
+    document.getElementById('monthlyAuditSummary').innerHTML = cards.map(([label, value]) => `
+        <div class="audit-summary-card">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(String(value))}</strong>
+        </div>
+    `).join('');
+
+    const costNotice = document.getElementById('monthlyAuditCostNotice');
+    if (summary.stockPurchaseQuantityWithoutCost > 0) {
+        costNotice.textContent =
+            `${summary.stockPurchaseQuantityWithoutCost} incoming stock unit(s) have no saved purchase cost. These may be older records; their cost is not included in the purchase total.`;
+        costNotice.classList.remove('hidden');
+    } else {
+        costNotice.textContent = '';
+        costNotice.classList.add('hidden');
+    }
+
+    const salesBody = document.getElementById('monthlyAuditSalesBody');
+    salesBody.innerHTML = report.sales.length
+        ? report.sales.map(order => `
+            <tr>
+                <td>${escapeHtml(formatAuditDate(order.created_at))}</td>
+                <td>${escapeHtml(order.order_number)}</td>
+                <td>${escapeHtml(order.customer_name || 'Walk-in Customer')}</td>
+                <td>${Number(order.itemCount || 0)}</td>
+                <td>${order.gstApplied ? 'Yes' : 'No'}</td>
+                <td>${formatAuditMoney(order.tax_amount)}</td>
+                <td>${escapeHtml(order.payment_status || 'Paid')}</td>
+                <td>${formatAuditMoney(order.net_amount)}</td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="8" class="text-center">No sales recorded for this month.</td></tr>';
+
+    const purchasesBody = document.getElementById('monthlyAuditPurchasesBody');
+    purchasesBody.innerHTML = report.stockPurchases.length
+        ? report.stockPurchases.map(entry => `
+            <tr>
+                <td>${escapeHtml(formatAuditDate(entry.created_at))}</td>
+                <td>${escapeHtml(entry.product_name)}</td>
+                <td>${Number(entry.quantity_change)}</td>
+                <td>${entry.purchase_unit_cost === null || entry.purchase_unit_cost === undefined
+                    ? 'Not recorded'
+                    : formatAuditMoney(entry.purchase_unit_cost)}</td>
+                <td>${entry.purchase_total === null || entry.purchase_total === undefined
+                    ? 'Not recorded'
+                    : formatAuditMoney(entry.purchase_total)}</td>
+                <td>${escapeHtml(entry.notes || '-')}</td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="6" class="text-center">No stock purchases recorded for this month.</td></tr>';
+}
+
+function csvCell(value) {
+    const text = String(value === null || value === undefined ? '' : value);
+    const safeText = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+}
+
+function downloadMonthlyAudit() {
+    const report = state.monthlyAudit;
+    if (!report) return;
+
+    const rows = [
+        ['Sensometric Specialities Monthly Audit', formatAuditMonth(report.month)],
+        [],
+        ['Summary'],
+        ['Sales orders', report.summary.orderCount],
+        ['Total sales (Rs.)', report.summary.totalSales],
+        ['Sales with GST (Rs.)', report.summary.salesWithGst],
+        ['Orders with GST', report.summary.gstSalesCount],
+        ['Sales without GST (Rs.)', report.summary.salesWithoutGst],
+        ['Orders without GST', report.summary.nonGstSalesCount],
+        ['GST collected (Rs.)', report.summary.gstCollected],
+        ['Paid sales (Rs.)', report.summary.paidSales],
+        ['Credit sales (Rs.)', report.summary.creditSales],
+        ['Items sold', report.summary.totalItemsSold],
+        ['Stock purchase entries', report.summary.stockPurchaseEntries],
+        ['Stock purchased quantity', report.summary.stockPurchaseQuantity],
+        ['Known stock purchase cost (Rs.)', report.summary.stockPurchaseCost],
+        ['Stock quantity without recorded cost', report.summary.stockPurchaseQuantityWithoutCost],
+        [],
+        ['Sales'],
+        ['Date', 'Order Number', 'Customer', 'Items Sold', 'GST Applied', 'GST Amount (Rs.)', 'Payment Status', 'Total (Rs.)'],
+        ...report.sales.map(order => [
+            formatAuditDate(order.created_at),
+            order.order_number,
+            order.customer_name || 'Walk-in Customer',
+            order.itemCount,
+            order.gstApplied ? 'Yes' : 'No',
+            order.tax_amount,
+            order.payment_status || 'Paid',
+            order.net_amount
+        ]),
+        [],
+        ['Stock Purchases'],
+        ['Date', 'Product', 'Quantity', 'Unit Cost (Rs.)', 'Purchase Total (Rs.)', 'Notes'],
+        ...report.stockPurchases.map(entry => [
+            formatAuditDate(entry.created_at),
+            entry.product_name,
+            entry.quantity_change,
+            entry.purchase_unit_cost ?? 'Not recorded',
+            entry.purchase_total ?? 'Not recorded',
+            entry.notes || ''
+        ])
+    ];
+    const csv = rows.map(row => row.map(csvCell).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sensometric_monthly_audit_${report.month}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function printMonthlyAudit() {
+    if (!state.monthlyAudit) return;
+    document.body.classList.add('print-monthly-audit');
+    try {
+        window.print();
+    } finally {
+        document.body.classList.remove('print-monthly-audit');
+    }
 }
 
 // ----------------------------------------------------

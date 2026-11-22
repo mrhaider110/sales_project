@@ -12,7 +12,18 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'sales_inventory_secret_key_2026';
+const isProduction = process.env.NODE_ENV === 'production' || process.env.NETLIFY === 'true';
+const JWT_SECRET = process.env.JWT_SECRET || (
+    isProduction ? null : 'sales_inventory_secret_key_2026'
+);
+
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET must be configured for production.');
+}
+
+if (process.env.NETLIFY) {
+    app.set('trust proxy', 1);
+}
 
 // Security Headers via Helmet
 app.use(
@@ -45,7 +56,7 @@ app.use('/api/', generalLimiter);
 // Login Protection
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: isProduction ? 20 : 500,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' }
@@ -145,7 +156,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
 app.post('/api/auth/register', loginLimiter, async (req, res) => {
     try {
-        let { username, password, fullName, gmail, role } = req.body;
+        let { username, password, fullName, gmail } = req.body;
 
         if (typeof username !== 'string' || typeof password !== 'string' ||
             typeof fullName !== 'string' || typeof gmail !== 'string' ||
@@ -181,18 +192,16 @@ app.post('/api/auth/register', loginLimiter, async (req, res) => {
 
         const saltRounds = 10;
         const password_hash = await bcrypt.hash(password, saltRounds);
-        const userRole = role === 'Admin' ? 'Admin' : 'Active User';
-
         await db.executeRun(
             'INSERT INTO Users (username, gmail, password_hash, full_name, role) VALUES (@username, @gmail, @password_hash, @fullName, @role)',
-            { username, gmail, password_hash, fullName, role: userRole }
+            { username, gmail, password_hash, fullName, role: 'Active User' }
         );
 
         res.json({ success: true, message: 'Account created successfully! You can now log in.' });
 
     } catch (err) {
         console.error('Register error:', err);
-        res.status(500).json({ success: false, message: 'Error creating user account: ' + err.message });
+        res.status(500).json({ success: false, message: 'Error creating user account.' });
     }
 });
 
@@ -309,13 +318,20 @@ app.post('/api/products', authenticateToken, async (req, res) => {
 
         const sanitizedName = String(name || '').trim();
         const numPrice = parseFloat(price);
+        const costPriceProvided = costPrice !== '' && costPrice !== null && costPrice !== undefined;
+        const numCostPrice = costPriceProvided ? Number(costPrice) : 0;
+        const initialStock = Math.max(0, parseInt(stockQuantity, 10) || 0);
 
-        if (!sanitizedName || isNaN(numPrice) || numPrice < 0) {
+        if (initialStock > 0 && !costPriceProvided) {
+            return res.status(400).json({ success: false, message: 'Enter the purchase cost per unit for the opening stock.' });
+        }
+
+        if (!sanitizedName || !Number.isFinite(numPrice) || numPrice < 0 ||
+            !Number.isFinite(numCostPrice) || numCostPrice < 0) {
             return res.status(400).json({ success: false, message: 'Valid Product Name and non-negative Price are required.' });
         }
 
         const generatedSku = sku ? String(sku).trim() : 'PRD-' + Date.now().toString().slice(-6);
-        const initialStock = Math.max(0, parseInt(stockQuantity) || 0);
 
         // Check if SKU already exists for THIS user
         const existingSku = await db.queryOne('SELECT id FROM Products WHERE sku = @sku AND user_id = @userId', { sku: generatedSku, userId });
@@ -332,7 +348,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 name: sanitizedName,
                 category: String(category || 'Products').trim(),
                 price: numPrice,
-                cost_price: Math.max(0, parseFloat(costPrice) || 0),
+                cost_price: numCostPrice,
                 stock_quantity: initialStock,
                 min_stock_alert: Math.max(1, parseInt(minStockAlert) || 5)
             }
@@ -341,9 +357,16 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         const inserted = await db.queryOne('SELECT id FROM Products WHERE name = @name AND user_id = @userId ORDER BY id DESC', { name: sanitizedName, userId });
         if (inserted && initialStock > 0) {
             await db.executeRun(
-                `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
-                 VALUES (@userId, @product_id, @product_name, @quantity_change, 'Initial Stock', 'Added new product to inventory')`,
-                { userId, product_id: inserted.id, product_name: sanitizedName, quantity_change: initialStock }
+                `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes, purchase_unit_cost, purchase_total)
+                 VALUES (@userId, @product_id, @product_name, @quantity_change, 'Initial Stock', 'Added new product to inventory', @purchase_unit_cost, @purchase_total)`,
+                {
+                    userId,
+                    product_id: inserted.id,
+                    product_name: sanitizedName,
+                    quantity_change: initialStock,
+                    purchase_unit_cost: numCostPrice,
+                    purchase_total: initialStock * numCostPrice
+                }
             );
         }
 
@@ -406,14 +429,25 @@ app.put('/api/products/:id/stock', authenticateToken, async (req, res) => {
     try {
         const productId = req.params.id;
         const userId = req.user.id;
-        const { adjustmentQuantity, notes } = req.body;
+        const { adjustmentQuantity, purchaseUnitCost, notes } = req.body;
 
         const product = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId', { id: productId, userId });
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found or access denied.' });
         }
 
-        const qtyDelta = parseInt(adjustmentQuantity) || 0;
+        const qtyDelta = Number(adjustmentQuantity);
+        if (!Number.isInteger(qtyDelta) || qtyDelta === 0) {
+            return res.status(400).json({ success: false, message: 'Enter a non-zero whole number for the stock change.' });
+        }
+
+        const unitCost = purchaseUnitCost === '' || purchaseUnitCost === null || purchaseUnitCost === undefined
+            ? NaN
+            : Number(purchaseUnitCost);
+        if (qtyDelta > 0 && (!Number.isFinite(unitCost) || unitCost < 0)) {
+            return res.status(400).json({ success: false, message: 'Enter a valid non-negative purchase cost per unit for incoming stock.' });
+        }
+
         const newStock = Math.max(0, (product.stock_quantity || 0) + qtyDelta);
 
         await db.executeRun(
@@ -422,15 +456,17 @@ app.put('/api/products/:id/stock', authenticateToken, async (req, res) => {
         );
 
         await db.executeRun(
-            `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes)
-             VALUES (@userId, @product_id, @product_name, @quantity_change, @change_type, @notes)`,
+            `INSERT INTO StockHistory (user_id, product_id, product_name, quantity_change, change_type, notes, purchase_unit_cost, purchase_total)
+             VALUES (@userId, @product_id, @product_name, @quantity_change, @change_type, @notes, @purchase_unit_cost, @purchase_total)`,
             {
                 userId,
                 product_id: productId,
                 product_name: product.name,
                 quantity_change: qtyDelta,
                 change_type: qtyDelta >= 0 ? 'Restock' : 'Stock Deduction',
-                notes: notes || (qtyDelta >= 0 ? 'Manual Stock Restock' : 'Manual Stock Adjustment')
+                notes: notes || (qtyDelta >= 0 ? 'Manual Stock Restock' : 'Manual Stock Adjustment'),
+                purchase_unit_cost: qtyDelta > 0 ? unitCost : null,
+                purchase_total: qtyDelta > 0 ? qtyDelta * unitCost : null
             }
         );
 
@@ -701,6 +737,128 @@ app.get('/api/orders/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/reports/monthly-audit', authenticateToken, async (req, res) => {
+    try {
+        const month = req.query.month;
+        if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+            return res.status(400).json({ success: false, message: 'Choose a valid month for the audit report.' });
+        }
+
+        const [year, monthNumber] = month.split('-').map(Number);
+        const startDate = `${month}-01`;
+        const endDate = monthNumber === 12
+            ? `${year + 1}-01-01`
+            : `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`;
+        const userId = req.user.id;
+
+        const orders = await db.queryAll(
+            `SELECT id, order_number, customer_name, payment_status, total_amount, tax_amount, net_amount, created_at
+             FROM Orders
+             WHERE user_id = @userId AND created_at >= @startDate AND created_at < @endDate
+             ORDER BY created_at, id`,
+            { userId, startDate, endDate }
+        );
+        const orderItems = await db.queryAll(
+            `SELECT oi.order_id, oi.product_name, oi.quantity, oi.unit_price, oi.subtotal
+             FROM OrderItems oi
+             INNER JOIN Orders o ON o.id = oi.order_id
+             WHERE o.user_id = @userId AND o.created_at >= @startDate AND o.created_at < @endDate`,
+            { userId, startDate, endDate }
+        );
+        const stockHistory = await db.queryAll(
+            `SELECT id, product_name, quantity_change, change_type, notes,
+                    purchase_unit_cost, purchase_total, created_at
+             FROM StockHistory
+             WHERE user_id = @userId AND created_at >= @startDate AND created_at < @endDate
+             ORDER BY created_at, id`,
+            { userId, startDate, endDate }
+        );
+
+        const itemsByOrder = new Map();
+        orderItems.forEach(item => {
+            const orderId = String(item.order_id);
+            const items = itemsByOrder.get(orderId) || [];
+            items.push(item);
+            itemsByOrder.set(orderId, items);
+        });
+
+        const sales = orders.map(order => {
+            const items = itemsByOrder.get(String(order.id)) || [];
+            return {
+                ...order,
+                items,
+                gstApplied: Number(order.tax_amount || 0) > 0,
+                itemCount: items.reduce((total, item) => total + Number(item.quantity || 0), 0)
+            };
+        });
+
+        const totalSales = sales.reduce((total, order) => total + Number(order.net_amount || 0), 0);
+        const gstSales = sales.filter(order => order.gstApplied);
+        const nonGstSales = sales.filter(order => !order.gstApplied);
+        const salesWithGst = gstSales.reduce((total, order) => total + Number(order.net_amount || 0), 0);
+        const salesWithoutGst = nonGstSales.reduce((total, order) => total + Number(order.net_amount || 0), 0);
+        const gstCollected = gstSales.reduce((total, order) => total + Number(order.tax_amount || 0), 0);
+        const paidSales = sales.reduce((total, order) => {
+            const status = String(order.payment_status || 'Paid').toLowerCase();
+            return total + (status.includes('udhaar') || status.includes('credit') || status.includes('pending')
+                ? 0
+                : Number(order.net_amount || 0));
+        }, 0);
+        const creditSales = totalSales - paidSales;
+        const totalItemsSold = sales.reduce((total, order) => total + order.itemCount, 0);
+
+        const stockPurchases = stockHistory.filter(entry =>
+            Number(entry.quantity_change) > 0 &&
+            (String(entry.change_type).toLowerCase().includes('restock') ||
+                String(entry.change_type).toLowerCase().includes('initial stock'))
+        );
+        const stockPurchaseQuantity = stockPurchases.reduce(
+            (total, entry) => total + Number(entry.quantity_change),
+            0
+        );
+        const stockPurchaseCost = stockPurchases.reduce(
+            (total, entry) => total + (entry.purchase_total === null || entry.purchase_total === undefined
+                ? 0
+                : Number(entry.purchase_total)),
+            0
+        );
+        const stockPurchaseQuantityWithoutCost = stockPurchases.reduce(
+            (total, entry) => total + (entry.purchase_total === null || entry.purchase_total === undefined
+                ? Number(entry.quantity_change)
+                : 0),
+            0
+        );
+
+        res.json({
+            success: true,
+            report: {
+                month,
+                summary: {
+                    orderCount: sales.length,
+                    totalSales,
+                    gstSalesCount: gstSales.length,
+                    salesWithGst,
+                    nonGstSalesCount: nonGstSales.length,
+                    salesWithoutGst,
+                    gstCollected,
+                    paidSales,
+                    creditSales,
+                    totalItemsSold,
+                    stockPurchaseEntries: stockPurchases.length,
+                    stockPurchaseQuantity,
+                    stockPurchaseCost,
+                    stockPurchaseQuantityWithoutCost
+                },
+                sales,
+                stockPurchases
+            }
+        });
+    } catch (err) {
+        console.error('Monthly audit report error:', err);
+        res.status(500).json({ success: false, message: 'Error generating the monthly audit report.' });
+    }
+});
+
 // ----------------------------------------------------
 // STOCK HISTORY AUDIT LOG API (Includes DELETE endpoint)
 // ----------------------------------------------------
@@ -732,11 +890,24 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start Server
-db.initDB().then(() => {
-    app.listen(PORT, () => {
-        console.log(`🚀 Sensometric Specialities App is running at http://localhost:${PORT}`);
+let databaseInitialization;
+
+function initializeDatabase() {
+    if (!databaseInitialization) {
+        databaseInitialization = db.initDB();
+    }
+    return databaseInitialization;
+}
+
+if (require.main === module) {
+    initializeDatabase().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Sensometric Specialities App is running at http://localhost:${PORT}`);
+        });
+    }).catch(err => {
+        console.error('Failed to initialize database:', err);
+        process.exitCode = 1;
     });
-}).catch(err => {
-    console.error('Failed to initialize database:', err);
-});
+}
+
+module.exports = { app, initializeDatabase };

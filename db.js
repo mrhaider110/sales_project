@@ -1,12 +1,15 @@
 const sql = require('mssql');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
 const path = require('path');
 require('dotenv').config();
 
-let dbType = 'MSSQL'; // 'MSSQL' or 'SQLITE'
+const isProduction = process.env.NODE_ENV === 'production' || process.env.NETLIFY === 'true';
+let dbType = 'MSSQL'; // 'MSSQL', 'SQLITE', or 'POSTGRES'
 let mssqlPool = null;
 let sqliteDb = null;
+let postgresPool = null;
 
 // Config for SSMS MS SQL Server
 const sqlConfig = {
@@ -22,8 +25,51 @@ const sqlConfig = {
     connectionTimeout: 5000
 };
 
+function getInitialAdminCredentials() {
+    const username = process.env.INITIAL_ADMIN_USERNAME;
+    const password = process.env.INITIAL_ADMIN_PASSWORD;
+
+    if (username || password) {
+        if (!username || !password) {
+            throw new Error('Both INITIAL_ADMIN_USERNAME and INITIAL_ADMIN_PASSWORD must be set together.');
+        }
+        return { username, password };
+    }
+
+    return isProduction
+        ? null
+        : { username: 'admin', password: 'admin123' };
+}
+
 // Initialize Database connection
 async function initDB() {
+    getInitialAdminCredentials();
+
+    if (process.env.DATABASE_URL) {
+        postgresPool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            max: parseInt(process.env.PG_POOL_MAX, 10) || 1,
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 10000
+        });
+
+        try {
+            await postgresPool.query('SELECT 1');
+            dbType = 'POSTGRES';
+            await initPostgresTables();
+            console.log('✅ Connected to PostgreSQL database.');
+            return;
+        } catch (err) {
+            await postgresPool.end();
+            postgresPool = null;
+            throw err;
+        }
+    }
+
+    if (isProduction) {
+        throw new Error('DATABASE_URL must be configured for production.');
+    }
+
     try {
         console.log('🔄 Attempting connection to SSMS (Microsoft SQL Server)...');
         mssqlPool = await new sql.ConnectionPool(sqlConfig).connect();
@@ -35,6 +81,104 @@ async function initDB() {
         console.log('🔄 Falling back to Local Embedded Database (SQLite) for immediate demo...');
         dbType = 'SQLITE';
         await initSqliteDB();
+    }
+}
+
+async function initPostgresTables() {
+    const statements = [
+        `CREATE TABLE IF NOT EXISTS Users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            gmail VARCHAR(254) UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            full_name VARCHAR(100) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'Active User',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS Products (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            sku VARCHAR(50) NOT NULL,
+            name VARCHAR(150) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            price NUMERIC(18, 2) NOT NULL,
+            cost_price NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+            stock_quantity INTEGER NOT NULL DEFAULT 0,
+            min_stock_alert INTEGER NOT NULL DEFAULT 5,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS Orders (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            order_number VARCHAR(50) NOT NULL UNIQUE,
+            customer_name VARCHAR(100) NOT NULL DEFAULT 'Walk-in Customer',
+            customer_phone VARCHAR(20) NOT NULL DEFAULT '',
+            customer_email VARCHAR(100) NOT NULL DEFAULT '',
+            delivery_address VARCHAR(255) NOT NULL DEFAULT '',
+            total_amount NUMERIC(18, 2) NOT NULL,
+            tax_amount NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+            gst_rate NUMERIC(18, 2) NOT NULL DEFAULT 18.00,
+            discount NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+            net_amount NUMERIC(18, 2) NOT NULL,
+            payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
+            payment_status VARCHAR(50) NOT NULL DEFAULT 'Paid',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS OrderItems (
+            id SERIAL PRIMARY KEY,
+            order_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            product_name VARCHAR(150) NOT NULL,
+            quantity INTEGER NOT NULL,
+            unit_price NUMERIC(18, 2) NOT NULL,
+            subtotal NUMERIC(18, 2) NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS StockHistory (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            product_id INTEGER NOT NULL,
+            product_name VARCHAR(150) NOT NULL,
+            quantity_change INTEGER NOT NULL,
+            change_type VARCHAR(50) NOT NULL,
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            purchase_unit_cost NUMERIC(18, 2),
+            purchase_total NUMERIC(18, 2),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`,
+        'ALTER TABLE StockHistory ADD COLUMN IF NOT EXISTS purchase_unit_cost NUMERIC(18, 2)',
+        'ALTER TABLE StockHistory ADD COLUMN IF NOT EXISTS purchase_total NUMERIC(18, 2)',
+        'CREATE UNIQUE INDEX IF NOT EXISTS UX_Products_user_sku ON Products(user_id, sku)',
+        'CREATE INDEX IF NOT EXISTS IX_Products_user_id ON Products(user_id)',
+        'CREATE INDEX IF NOT EXISTS IX_Orders_user_id ON Orders(user_id)',
+        'CREATE INDEX IF NOT EXISTS IX_StockHistory_user_id ON StockHistory(user_id)'
+    ];
+
+    for (const statement of statements) {
+        await postgresPool.query(statement);
+    }
+
+    const userCount = await postgresPool.query('SELECT COUNT(*)::INTEGER AS count FROM Users');
+    const adminCredentials = getInitialAdminCredentials();
+    if (userCount.rows[0].count === 0 && adminCredentials) {
+        const passwordHash = await bcrypt.hash(adminCredentials.password, 10);
+        await postgresPool.query(
+            "INSERT INTO Users (username, password_hash, full_name, role) VALUES ($1, $2, $3, 'Admin') ON CONFLICT (username) DO NOTHING",
+            [adminCredentials.username, passwordHash, 'System Administrator']
+        );
+    }
+
+    const productCount = await postgresPool.query('SELECT COUNT(*)::INTEGER AS count FROM Products');
+    if (productCount.rows[0].count === 0) {
+        await postgresPool.query(`
+            INSERT INTO Products (user_id, sku, name, category, price, cost_price, stock_quantity, min_stock_alert)
+            VALUES
+                (1, 'PRD-1001', 'Wireless Mouse', 'Electronics', 1500.00, 950.00, 45, 10),
+                (1, 'PRD-1002', 'Mechanical Keyboard', 'Electronics', 4500.00, 3200.00, 20, 5),
+                (1, 'PRD-1003', 'USB-C Charging Cable 2m', 'Accessories', 850.00, 400.00, 8, 10),
+                (1, 'PRD-1004', 'HD LED Monitor 24-inch', 'Electronics', 28500.00, 22000.00, 12, 3),
+                (1, 'PRD-1005', 'Ergonomic Desk Chair', 'Furniture', 18500.00, 13500.00, 4, 5)
+            ON CONFLICT (user_id, sku) DO NOTHING
+        `);
     }
 }
 
@@ -127,8 +271,20 @@ async function initMssqlTables() {
                     quantity_change INT NOT NULL,
                     change_type NVARCHAR(50) NOT NULL,
                     notes NVARCHAR(255) DEFAULT '',
+                    purchase_unit_cost DECIMAL(18, 2) NULL,
+                    purchase_total DECIMAL(18, 2) NULL,
                     created_at DATETIME DEFAULT GETDATE()
                 );
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('StockHistory') AND name = 'purchase_unit_cost')
+            BEGIN
+                ALTER TABLE StockHistory ADD purchase_unit_cost DECIMAL(18, 2) NULL;
+            END;
+
+            IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('StockHistory') AND name = 'purchase_total')
+            BEGIN
+                ALTER TABLE StockHistory ADD purchase_total DECIMAL(18, 2) NULL;
             END;
 
             IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Products') AND name = 'user_id')
@@ -149,10 +305,11 @@ async function initMssqlTables() {
 
         // Check if admin user exists
         const userCheck = await mssqlPool.request().query("SELECT COUNT(*) as count FROM Users");
-        if (userCheck.recordset[0].count === 0) {
-            const hash = await bcrypt.hash('admin123', 10);
+        const adminCredentials = getInitialAdminCredentials();
+        if (userCheck.recordset[0].count === 0 && adminCredentials) {
+            const hash = await bcrypt.hash(adminCredentials.password, 10);
             const req = mssqlPool.request();
-            req.input('username', sql.NVarChar, 'admin');
+            req.input('username', sql.NVarChar, adminCredentials.username);
             req.input('password_hash', sql.NVarChar, hash);
             req.input('full_name', sql.NVarChar, 'System Administrator');
             await req.query("INSERT INTO Users (username, password_hash, full_name, role) VALUES (@username, @password_hash, @full_name, 'Admin')");
@@ -245,6 +402,8 @@ function initSqliteDB() {
                     quantity_change INTEGER NOT NULL,
                     change_type TEXT NOT NULL,
                     notes TEXT DEFAULT '',
+                    purchase_unit_cost REAL,
+                    purchase_total REAL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`);
 
@@ -265,6 +424,36 @@ function initSqliteDB() {
                     }
 
                     const hasGmailColumn = columns.some(column => column.name === 'gmail');
+                    const migrateStockHistoryColumns = () => {
+                        sqliteDb.all('PRAGMA table_info(StockHistory)', (stockColumnsErr, stockColumns) => {
+                            if (stockColumnsErr) {
+                                console.error('Error checking StockHistory table columns:', stockColumnsErr.message);
+                                return reject(stockColumnsErr);
+                            }
+
+                            const stockColumnNames = new Set(stockColumns.map(column => column.name));
+                            const missingColumns = [
+                                ['purchase_unit_cost', 'REAL'],
+                                ['purchase_total', 'REAL']
+                            ].filter(([name]) => !stockColumnNames.has(name));
+
+                            const addNextColumn = () => {
+                                if (missingColumns.length === 0) {
+                                    return resolve();
+                                }
+                                const [name, type] = missingColumns.shift();
+                                sqliteDb.run(`ALTER TABLE StockHistory ADD COLUMN ${name} ${type}`, alterErr => {
+                                    if (alterErr) {
+                                        console.error(`Error adding ${name} to StockHistory:`, alterErr.message);
+                                        return reject(alterErr);
+                                    }
+                                    addNextColumn();
+                                });
+                            };
+
+                            addNextColumn();
+                        });
+                    };
                     const createGmailIndex = () => {
                         sqliteDb.run(
                             'CREATE UNIQUE INDEX IF NOT EXISTS UX_Users_gmail ON Users(gmail) WHERE gmail IS NOT NULL',
@@ -273,7 +462,7 @@ function initSqliteDB() {
                                     console.error('Error creating Gmail uniqueness index:', indexErr.message);
                                     return reject(indexErr);
                                 }
-                                resolve();
+                                migrateStockHistoryColumns();
                             }
                         );
                     };
@@ -293,11 +482,12 @@ function initSqliteDB() {
 
                 // Check default admin user
                 sqliteDb.get("SELECT COUNT(*) as count FROM Users", async (err, row) => {
-                    if (row && row.count === 0) {
-                        const hash = await bcrypt.hash('admin123', 10);
+                    const adminCredentials = getInitialAdminCredentials();
+                    if (row && row.count === 0 && adminCredentials) {
+                        const hash = await bcrypt.hash(adminCredentials.password, 10);
                         sqliteDb.run(
                             "INSERT INTO Users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
-                            ['admin', hash, 'System Administrator', 'Admin']
+                            [adminCredentials.username, hash, 'System Administrator', 'Admin']
                         );
                     }
                 });
@@ -320,9 +510,27 @@ function initSqliteDB() {
     });
 }
 
+function preparePostgresQuery(sqlStr, params) {
+    const keys = Object.keys(params);
+    const parameterIndexes = new Map(keys.map((key, index) => [key, index + 1]));
+    const text = sqlStr.replace(/@([A-Za-z_][A-Za-z0-9_]*)/g, (placeholder, key) => {
+        const index = parameterIndexes.get(key);
+        if (index === undefined) {
+            throw new Error(`Missing database parameter: ${key}`);
+        }
+        return `$${index}`;
+    });
+
+    return { text, values: keys.map(key => params[key]) };
+}
+
 // Unified Query Execution Helper
 async function queryAll(sqlStr, params = {}) {
-    if (dbType === 'MSSQL') {
+    if (dbType === 'POSTGRES') {
+        const query = preparePostgresQuery(sqlStr, params);
+        const result = await postgresPool.query(query.text, query.values);
+        return result.rows;
+    } else if (dbType === 'MSSQL') {
         const req = mssqlPool.request();
         for (const [key, val] of Object.entries(params)) {
             req.input(key, val);
@@ -352,7 +560,10 @@ async function queryOne(sqlStr, params = {}) {
 }
 
 async function executeRun(sqlStr, params = {}) {
-    if (dbType === 'MSSQL') {
+    if (dbType === 'POSTGRES') {
+        const query = preparePostgresQuery(sqlStr, params);
+        return postgresPool.query(query.text, query.values);
+    } else if (dbType === 'MSSQL') {
         const req = mssqlPool.request();
         for (const [key, val] of Object.entries(params)) {
             req.input(key, val);

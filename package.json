@@ -1,7 +1,7 @@
 {
   "name": "sales-inventory-app",
   "version": "1.0.0",
-  "description": "Sales and Inventory Management System with Node.js and SQL Server (SSMS)",
+  "description": "Sensometric Specialities sales and inventory portal",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,11 +13,11 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.7.0",
-    "express-validator": "^7.3.2",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "mssql": "^10.0.2",
-    "puppeteer": "^25.11.0",
-    "sqlite3": "^5.1.7"
+    "mssql": "^12.8.0",
+    "pg": "^8.23.1",
+    "serverless-http": "^4.0.0",
+    "sqlite3": "^6.0.1"
   }
 }
