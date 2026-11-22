@@ -74,6 +74,50 @@ function updateThemeIcon() {
 
 // Event Listeners setup
 function setupEventListeners() {
+    const mobileNav = document.getElementById('mobileNavigation');
+    const mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const mobileViewport = window.matchMedia('(max-width: 768px)');
+
+    const setMobileNavOpen = (isOpen, restoreFocus = false) => {
+        const shouldOpen = isOpen && mobileViewport.matches;
+        mainApp.classList.toggle('mobile-nav-open', shouldOpen);
+        document.body.classList.toggle('mobile-nav-open', shouldOpen);
+        mobileMenuToggle?.setAttribute('aria-expanded', String(shouldOpen));
+        mobileNav?.setAttribute('aria-hidden', String(mobileViewport.matches && !shouldOpen));
+        mobileNavBackdrop?.setAttribute('aria-hidden', String(!shouldOpen));
+
+        if (shouldOpen) {
+            mobileNav?.querySelector('.nav-item.active')?.focus({ preventScroll: true });
+        } else if (restoreFocus && mobileViewport.matches) {
+            mobileMenuToggle?.focus({ preventScroll: true });
+        }
+    };
+
+    setMobileNavOpen(false);
+
+    mobileMenuToggle?.addEventListener('click', () => {
+        setMobileNavOpen(!mainApp.classList.contains('mobile-nav-open'));
+    });
+
+    mobileNavBackdrop?.addEventListener('click', () => setMobileNavOpen(false, true));
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && mainApp.classList.contains('mobile-nav-open')) {
+            setMobileNavOpen(false, true);
+        }
+    });
+
+    mobileViewport.addEventListener('change', (event) => {
+        if (!event.matches) {
+            setMobileNavOpen(false);
+        } else {
+            mobileNav?.setAttribute('aria-hidden', 'true');
+            mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+            mobileNavBackdrop?.setAttribute('aria-hidden', 'true');
+        }
+    });
+
     // Auth Form Toggle
     document.getElementById('showRegisterBtn')?.addEventListener('click', () => {
         document.getElementById('loginForm').classList.add('hidden');
@@ -93,6 +137,10 @@ function setupEventListeners() {
 
     // Logout
     document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
+    document.getElementById('mobileLogoutBtn')?.addEventListener('click', () => {
+        setMobileNavOpen(false);
+        handleLogout();
+    });
 
     // Theme Toggle
     document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
@@ -130,12 +178,20 @@ function setupEventListeners() {
                     }
                 }
             }
+
+            if (mobileViewport.matches) {
+                setMobileNavOpen(false, true);
+            }
         });
     });
 
     // Sidebar Search Input
     document.getElementById('sidebarSearch')?.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase();
+        document.querySelectorAll('.liquid-glass-dock .nav-item').forEach(item => {
+            item.classList.toggle('search-hidden', Boolean(query) && !item.innerText.toLowerCase().includes(query));
+        });
+
         document.querySelectorAll('.accordion-card').forEach(card => {
             const text = card.innerText.toLowerCase();
             if (!query || text.includes(query)) {
@@ -317,7 +373,12 @@ function checkAuth() {
                 .join('')
                 .substring(0, 2)
                 .toUpperCase() || 'U';
-            avatarEl.innerText = initials;
+            const initialsEl = avatarEl.querySelector('.user-avatar-initials');
+            if (initialsEl) {
+                initialsEl.innerText = initials;
+            } else {
+                avatarEl.innerText = initials;
+            }
         }
 
         // Fetch initial data for this specific user account
