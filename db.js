@@ -1,5 +1,4 @@
 const sql = require('mssql');
-const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const path = require('path');
@@ -336,6 +335,8 @@ async function initMssqlTables() {
 
 // SQLite Local Fallback Setup
 function initSqliteDB() {
+    const sqlite3 = require('sqlite3').verbose();
+
     return new Promise((resolve, reject) => {
         const dbPath = path.join(__dirname, 'sales_inventory.db');
         sqliteDb = new sqlite3.Database(dbPath, async (err) => {
