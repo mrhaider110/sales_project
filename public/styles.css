@@ -1227,6 +1227,62 @@ body.dark-theme .pill-select {
     gap: 8px;
 }
 
+.add-order-item-btn {
+    align-self: flex-start;
+}
+
+.order-cart-section {
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.45);
+}
+
+body.dark-theme .order-cart-section {
+    background: rgba(16, 33, 58, 0.35);
+}
+
+.order-cart-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.order-cart-heading h3 {
+    margin: 0;
+    color: var(--text-heading);
+    font-size: 15px;
+}
+
+#orderCartCount {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.order-cart-table {
+    min-width: 560px;
+}
+
+.order-cart-table td:first-child {
+    min-width: 150px;
+    white-space: normal;
+}
+
+.order-cart-table td:last-child {
+    width: 52px;
+    text-align: right;
+}
+
+.order-cart-empty {
+    padding: 20px 14px !important;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 .form-options-row {
     display: flex;
     align-items: center;

@@ -271,17 +271,44 @@
                                     <select id="itemSelect" class="pill-select">
                                         <option value="">-- Select Product from Inventory or Enter Below --</option>
                                     </select>
-                                    <input type="text" id="itemName" placeholder="Item Name" required>
+                                    <input type="text" id="itemName" placeholder="Item Name">
                                 </div>
                             </div>
 
                             <!-- Row 4: Quantity & Price per item -->
                             <div class="form-row-2">
                                 <div class="pill-input-box">
-                                    <input type="number" id="itemQuantity" placeholder="Quantity" min="1" value="1" required>
+                                    <input type="number" id="itemQuantity" placeholder="Quantity" min="1" value="1">
                                 </div>
                                 <div class="pill-input-box">
-                                    <input type="number" step="0.01" id="itemPrice" placeholder="Price per item" required>
+                                    <input type="number" step="0.01" id="itemPrice" placeholder="Price per item">
+                                </div>
+                            </div>
+
+                            <button type="button" id="addOrderItemBtn" class="btn btn-outline-sm add-order-item-btn">
+                                <i class="fa-solid fa-plus"></i> Add Item to Invoice
+                            </button>
+
+                            <div class="order-cart-section">
+                                <div class="order-cart-heading">
+                                    <h3>Items in This Invoice</h3>
+                                    <span id="orderCartCount">0 line items</span>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="portal-table order-cart-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Item</th>
+                                                <th>Qty</th>
+                                                <th>Unit Price</th>
+                                                <th>Subtotal</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="orderCartBody">
+                                            <tr><td colspan="5" class="order-cart-empty">No items added yet.</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
 

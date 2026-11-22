@@ -163,6 +163,8 @@ function setupEventListeners() {
 
     // Create Order Form submission & calculation
     document.getElementById('createOrderForm')?.addEventListener('submit', handleCreateOrderSubmit);
+    document.getElementById('addOrderItemBtn')?.addEventListener('click', addOrderItemToCart);
+    document.getElementById('orderCartBody')?.addEventListener('click', handleOrderCartClick);
     document.getElementById('itemQuantity')?.addEventListener('input', calculateOrderTotal);
     document.getElementById('itemPrice')?.addEventListener('input', calculateOrderTotal);
     document.getElementById('includeGstCheck')?.addEventListener('change', calculateOrderTotal);
@@ -370,6 +372,8 @@ async function handleLogin(e) {
             state.monthlyAudit = null;
             document.getElementById('monthlyAuditResults')?.classList.add('hidden');
             state.cart = [];
+            renderOrderCart();
+            calculateOrderTotal();
 
             state.token = data.token;
             state.user = data.user;
@@ -422,6 +426,8 @@ function handleLogout(showNotification = true) {
     state.orders = [];
     state.stockHistory = [];
     state.cart = [];
+    renderOrderCart();
+    calculateOrderTotal();
     localStorage.removeItem('sh_token');
     localStorage.removeItem('sh_user');
 
@@ -762,11 +768,16 @@ async function deleteProduct(id, productName) {
 // CREATE NEW ORDER FORM LOGIC
 // ----------------------------------------------------
 function calculateOrderTotal() {
-    const qty = parseFloat(document.getElementById('itemQuantity')?.value) || 0;
-    const price = parseFloat(document.getElementById('itemPrice')?.value) || 0;
+    const quantity = Number(document.getElementById('itemQuantity')?.value) || 0;
+    const price = Number(document.getElementById('itemPrice')?.value) || 0;
+    const itemName = document.getElementById('itemName')?.value.trim();
+    const selectedProduct = document.getElementById('itemSelect')?.value;
     const includeGst = document.getElementById('includeGstCheck')?.checked || false;
 
-    const subtotal = qty * price;
+    const cartSubtotal = state.cart.reduce((total, item) => total + item.quantity * item.unitPrice, 0);
+    const hasCurrentItem = Boolean(itemName || selectedProduct);
+    const currentItemSubtotal = hasCurrentItem ? quantity * price : 0;
+    const subtotal = cartSubtotal + currentItemSubtotal;
     const tax = includeGst ? (subtotal * 0.18) : 0;
     const totalPayable = Math.max(0, subtotal + tax);
 
@@ -776,6 +787,98 @@ function calculateOrderTotal() {
     }
 }
 
+function getCurrentOrderItem() {
+    const itemName = document.getElementById('itemName')?.value.trim() || '';
+    const productId = Number(document.getElementById('itemSelect')?.value) || 0;
+    const quantityValue = document.getElementById('itemQuantity')?.value;
+    const priceValue = document.getElementById('itemPrice')?.value;
+    const quantity = Number(quantityValue);
+    const unitPrice = Number(priceValue);
+
+    if (!itemName) {
+        showToast('Please enter or select an Item Name.', 'warning');
+        return null;
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0 || priceValue === '' || !Number.isFinite(unitPrice) || unitPrice < 0) {
+        showToast('Please enter a valid Quantity and Price.', 'warning');
+        return null;
+    }
+
+    return { productId, productName: itemName, quantity, unitPrice };
+}
+
+function resetOrderItemInputs() {
+    document.getElementById('itemSelect').value = '';
+    document.getElementById('itemName').value = '';
+    document.getElementById('itemQuantity').value = '1';
+    document.getElementById('itemPrice').value = '';
+}
+
+function addOrderItemToCart() {
+    const item = getCurrentOrderItem();
+    if (!item) return;
+
+    const existingItem = item.productId > 0
+        ? state.cart.find(cartItem =>
+            cartItem.productId === item.productId &&
+            cartItem.productName === item.productName &&
+            cartItem.unitPrice === item.unitPrice
+        )
+        : null;
+
+    if (existingItem) {
+        existingItem.quantity += item.quantity;
+    } else {
+        state.cart.push(item);
+    }
+
+    resetOrderItemInputs();
+    renderOrderCart();
+    calculateOrderTotal();
+}
+
+function renderOrderCart() {
+    const tbody = document.getElementById('orderCartBody');
+    const count = document.getElementById('orderCartCount');
+    if (!tbody) return;
+
+    if (count) {
+        count.textContent = `${state.cart.length} line item${state.cart.length === 1 ? '' : 's'}`;
+    }
+
+    if (state.cart.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="order-cart-empty">No items added yet.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = state.cart.map((item, index) => `
+        <tr>
+            <td><strong>${escapeHtml(item.productName)}</strong></td>
+            <td>${item.quantity}</td>
+            <td>Rs.${item.unitPrice.toFixed(2)}</td>
+            <td>Rs.${(item.quantity * item.unitPrice).toFixed(2)}</td>
+            <td>
+                <button type="button" class="btn-outline-sm text-danger" data-remove-cart-item="${index}" aria-label="Remove ${escapeHtml(item.productName)}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function handleOrderCartClick(event) {
+    const removeButton = event.target.closest('[data-remove-cart-item]');
+    if (!removeButton) return;
+
+    const index = Number(removeButton.dataset.removeCartItem);
+    if (!Number.isInteger(index) || index < 0 || index >= state.cart.length) return;
+
+    state.cart.splice(index, 1);
+    renderOrderCart();
+    calculateOrderTotal();
+}
+
 async function handleCreateOrderSubmit(e) {
     e.preventDefault();
 
@@ -783,37 +886,29 @@ async function handleCreateOrderSubmit(e) {
     const customerPhone = document.getElementById('custPhone')?.value.trim() || '';
     const customerEmail = document.getElementById('custEmail')?.value.trim() || '';
     const deliveryAddress = document.getElementById('deliveryAddress')?.value.trim() || '';
-    const itemName = document.getElementById('itemName')?.value.trim();
-    const itemSelectVal = document.getElementById('itemSelect')?.value;
-    const quantity = parseInt(document.getElementById('itemQuantity')?.value) || 1;
-    const unitPrice = parseFloat(document.getElementById('itemPrice')?.value) || 0;
-
     const isUdhaar = document.getElementById('markUdhaarCheck')?.checked || false;
     const includeGst = document.getElementById('includeGstCheck')?.checked || false;
+    const hasCurrentItem = Boolean(
+        document.getElementById('itemName')?.value.trim() ||
+        document.getElementById('itemSelect')?.value ||
+        document.getElementById('itemPrice')?.value
+    );
+    const currentItem = hasCurrentItem ? getCurrentOrderItem() : null;
+    if (hasCurrentItem && !currentItem) return;
 
-    if (!itemName) {
-        showToast('Please enter or select an Item Name.', 'warning');
+    const items = [...state.cart, ...(currentItem ? [currentItem] : [])];
+
+    if (items.length === 0) {
+        showToast('Add at least one item to the invoice.', 'warning');
         return;
     }
-
-    if (quantity <= 0 || unitPrice < 0) {
-        showToast('Please enter a valid Quantity and Price.', 'warning');
-        return;
-    }
-
-    const productId = itemSelectVal ? parseInt(itemSelectVal) : 0;
 
     const orderData = {
         customerName,
         customerPhone,
         customerEmail,
         deliveryAddress,
-        items: [{
-            productId: productId,
-            productName: itemName,
-            quantity: quantity,
-            unitPrice: unitPrice
-        }],
+        items,
         discount: 0,
         paymentMethod: isUdhaar ? 'Credit' : 'Cash',
         paymentStatus: isUdhaar ? 'Udhaar' : 'Paid',
@@ -836,6 +931,8 @@ async function handleCreateOrderSubmit(e) {
 
             // Reset Form
             document.getElementById('createOrderForm').reset();
+            state.cart = [];
+            renderOrderCart();
             document.getElementById('includeGstCheck').checked = true;
             calculateOrderTotal();
 

@@ -517,28 +517,53 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Order must contain at least one item.' });
         }
 
-        for (const item of items) {
-            if (item.productId && item.productId > 0) {
-                const prod = await db.queryOne('SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId', { id: item.productId, userId });
-                if (!prod) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        message: `Product "${item.productName || item.productId}" not found in your inventory.` 
-                    });
-                }
-                if (prod.stock_quantity < item.quantity) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        message: `Insufficient stock for "${prod.name}". Available: ${prod.stock_quantity}, Requested: ${item.quantity}` 
-                    });
-                }
+        const orderItems = items.map(item => ({
+            productId: Number(item && item.productId || 0),
+            productName: typeof (item && item.productName) === 'string' ? item.productName.trim() : '',
+            quantity: Number(item && item.quantity),
+            unitPrice: Number(item && item.unitPrice)
+        }));
+
+        if (orderItems.some(item =>
+            !Number.isInteger(item.productId) || item.productId < 0 ||
+            !item.productName ||
+            !Number.isInteger(item.quantity) || item.quantity <= 0 ||
+            !Number.isFinite(item.unitPrice) || item.unitPrice < 0
+        )) {
+            return res.status(400).json({ success: false, message: 'Each item must have a name, positive whole-number quantity, and valid price.' });
+        }
+
+        const requestedQuantities = new Map();
+        for (const item of orderItems) {
+            if (item.productId > 0) {
+                requestedQuantities.set(
+                    item.productId,
+                    (requestedQuantities.get(item.productId) || 0) + item.quantity
+                );
             }
         }
 
-        let totalSubtotal = 0;
-        items.forEach(item => {
-            totalSubtotal += (item.unitPrice * item.quantity);
-        });
+        for (const [productId, requestedQuantity] of requestedQuantities) {
+            const prod = await db.queryOne(
+                'SELECT name, stock_quantity FROM Products WHERE id = @id AND user_id = @userId',
+                { id: productId, userId }
+            );
+            if (!prod) {
+                const item = orderItems.find(orderItem => orderItem.productId === productId);
+                return res.status(400).json({
+                    success: false,
+                    message: `Product "${item.productName || productId}" not found in your inventory.`
+                });
+            }
+            if (prod.stock_quantity < requestedQuantity) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Insufficient stock for "${prod.name}". Available: ${prod.stock_quantity}, Requested: ${requestedQuantity}`
+                });
+            }
+        }
+
+        const totalSubtotal = orderItems.reduce((total, item) => total + (item.unitPrice * item.quantity), 0);
 
         const gstRate = 18.00;
         const taxAmount = includeGst ? (totalSubtotal * (gstRate / 100)) : 0.00;
@@ -572,7 +597,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
         const statusTag = (status.toLowerCase().includes('udhaar') || status.toLowerCase().includes('credit')) ? 'Credit' : 'Paid';
 
-        for (const item of items) {
+        for (const item of orderItems) {
             const subtotal = item.unitPrice * item.quantity;
             await db.executeRun(
                 `INSERT INTO OrderItems (order_id, product_id, product_name, quantity, unit_price, subtotal)
